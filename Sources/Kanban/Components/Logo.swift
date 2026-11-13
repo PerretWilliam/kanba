@@ -8,7 +8,7 @@ struct Logo: Shape {
         let w = r.width * 0.26, heights = [1.0, 0.65, 0.82]
         for (i, h) in heights.enumerated() {
             let x = r.minX + CGFloat(i) * (r.width - w) / 2
-            p.addRoundedRect(in: CGRect(x: x, y: r.maxY - r.height * h, width: w, height: r.height * h),
+            p.addRoundedRect(in: CGRect(x: x, y: r.minY, width: w, height: r.height * h),
                              cornerSize: CGSize(width: w / 2.5, height: w / 2.5))
         }
         return p

@@ -16,7 +16,7 @@ func render(_ px: Int) -> Data {
     let w = inner.width * 0.26
     for (i, h) in [1.0, 0.65, 0.82].enumerated() {
         let x = inner.minX + CGFloat(i) * (inner.width - w) / 2
-        let r = NSRect(x: x, y: inner.minY, width: w, height: inner.height * h)
+        let r = NSRect(x: x, y: inner.maxY - inner.height * h, width: w, height: inner.height * h)
         NSColor.white.withAlphaComponent(0.95).setFill()
         NSBezierPath(roundedRect: r, xRadius: w / 2.5, yRadius: w / 2.5).fill()
     }
