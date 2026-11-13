@@ -18,7 +18,7 @@ struct Logo: Shape {
 struct LogoMark: View {
     var body: some View {
         RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(LinearGradient(colors: [.blue, .purple], startPoint: .topLeading, endPoint: .bottomTrailing))
+            .fill(LinearGradient(colors: [Color(white: 0.24), Color(white: 0.09)], startPoint: .top, endPoint: .bottom))
             .overlay(Logo().fill(.white).padding(6))
             .frame(width: 28, height: 28)
     }
