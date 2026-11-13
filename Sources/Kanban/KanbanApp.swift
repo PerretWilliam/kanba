@@ -6,7 +6,7 @@ enum Status: String, Codable, CaseIterable, Identifiable {
     case todo, doing, done
     var id: Self { self }
     var label: String { ["todo": "À faire", "doing": "En cours", "done": "Terminé"][rawValue]! }
-    var color: Color { switch self { case .todo: .purple; case .doing: .blue; case .done: .green } }
+    var color: Color { switch self { case .todo: .gray; case .doing: .blue; case .done: .green } }
 }
 
 enum Priority: Int, Codable, CaseIterable, Identifiable {
@@ -91,7 +91,7 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            HStack(spacing: 12) {
+            HStack(spacing: 14) {
                 ForEach(Status.allCases) { status in
                     ColumnView(status: status, cards: cards(in: status),
                                onEdit: { editing = $0 },
@@ -99,7 +99,7 @@ struct ContentView: View {
                                onDrop: { store.move($0, to: status) })
                 }
             }
-            .padding([.horizontal, .bottom], 12)
+            .padding([.horizontal, .bottom], 14)
             .frame(maxHeight: .infinity)
         }
         .background(.background)
@@ -119,31 +119,35 @@ struct ContentView: View {
                 .frame(width: 22, height: 22)
             Text("Kanban").font(.title3.weight(.semibold))
             Spacer()
-            Menu {
-                Picker("Priorité", selection: $filter) {
-                    Text("Toutes").tag(Priority?.none)
-                    ForEach(Priority.allCases) { Text($0.label).tag(Optional($0)) }
-                }.pickerStyle(.inline)
-            } label: {
-                icon("line.3.horizontal.decrease", tint: filter == nil ? .secondary : .accentColor)
+            GlassEffectContainer(spacing: 8) {
+                HStack(spacing: 8) {
+                    Menu {
+                        Picker("Priorité", selection: $filter) {
+                            Text("Toutes").tag(Priority?.none)
+                            ForEach(Priority.allCases) { Text($0.label).tag(Optional($0)) }
+                        }.pickerStyle(.inline)
+                    } label: {
+                        icon("line.3.horizontal.decrease", filter == nil ? .primary : .accentColor)
+                    }
+                    .menuStyle(.button).menuIndicator(.hidden).help("Filtrer par priorité")
+                    iconButton("trash", "Supprimer les cartes terminées", .red) { confirmClear = true }
+                    iconButton("plus", "Nouvelle carte", .accentColor) { editing = Card() }
+                        .keyboardShortcut("n")
+                }
+                .buttonStyle(.glass).buttonBorderShape(.circle).controlSize(.large)
             }
-            .menuStyle(.button).buttonStyle(.borderless).menuIndicator(.hidden).fixedSize()
-            .help("Filtrer par priorité")
-            iconButton("trash", "Supprimer les cartes terminées", tint: .red) { confirmClear = true }
-            iconButton("plus", "Nouvelle carte", tint: .accentColor) { editing = Card() }
-                .keyboardShortcut("n")
         }
         .padding(.horizontal, 16)
         .frame(height: 52)
     }
 
-    private func icon(_ name: String, tint: Color) -> some View {
+    private func icon(_ name: String, _ tint: Color) -> some View {
         Image(systemName: name).font(.system(size: 15, weight: .medium)).foregroundStyle(tint)
-            .frame(width: 32, height: 32)
+            .frame(width: 20, height: 20)
     }
 
-    private func iconButton(_ name: String, _ tip: String, tint: Color, action: @escaping () -> Void) -> some View {
-        Button(action: action) { icon(name, tint: tint) }.buttonStyle(.borderless).help(tip)
+    private func iconButton(_ name: String, _ tip: String, _ tint: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) { icon(name, tint) }.help(tip)
     }
 
     private func cards(in status: Status) -> [Card] {
@@ -177,7 +181,7 @@ struct ColumnView: View {
                 Button(action: onAdd) { Image(systemName: "plus") }
                     .buttonStyle(.borderless).foregroundStyle(status.color).help("Ajouter une carte dans « \(status.label) »")
             }
-            .padding(.horizontal, 12).padding(.vertical, 10)
+            .padding(.horizontal, 16).padding(.vertical, 12)
             ScrollView {
                 LazyVStack(spacing: 8) {
                     ForEach(cards) { card in
@@ -186,11 +190,11 @@ struct ColumnView: View {
                             .draggable(card.id.uuidString)
                     }
                 }
-                .padding([.horizontal, .bottom], 10)
+                .padding([.horizontal, .bottom], 12)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(status.color.opacity(targeted ? 0.22 : 0.1), in: RoundedRectangle(cornerRadius: 12))
+        .background(status.color.opacity(targeted ? 0.2 : 0.09), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .dropDestination(for: String.self) { ids, _ in onDrop(ids); return true } isTargeted: { targeted = $0 }
     }
 }
@@ -220,11 +224,12 @@ struct CardView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 10).padding(.leading, 16).padding(.trailing, 10)
-        .background(.background, in: RoundedRectangle(cornerRadius: 8))
+        .background(.background.shadow(.drop(color: .black.opacity(0.08), radius: 5, y: 2)),
+                    in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(alignment: .leading) {
             Capsule().fill(card.priority.color).frame(width: 4).padding(.vertical, 8).padding(.leading, 3)
         }
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(.quaternary))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(.quaternary.opacity(0.6)))
         .opacity(card.status == .done ? 0.6 : 1)
         .contentShape(Rectangle())
     }
@@ -240,33 +245,53 @@ struct EditView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        Form {
-            TextField("Titre", text: $card.title)
-            TextField("Notes", text: $card.notes, axis: .vertical).lineLimit(3...6)
-            Picker("Priorité", selection: $card.priority) {
-                ForEach(Priority.allCases) { Text($0.label).tag($0) }
-            }.pickerStyle(.segmented)
-            Picker("Statut", selection: $card.status) {
-                ForEach(Status.allCases) { Text($0.label).tag($0) }
+        VStack(alignment: .leading, spacing: 16) {
+            Text(isNew ? "Nouvelle carte" : "Modifier la carte").font(.title3.weight(.semibold))
+            field("Titre") { TextField("", text: $card.title).textFieldStyle(.roundedBorder) }
+            field("Notes") {
+                TextField("", text: $card.notes, axis: .vertical).lineLimit(3...6)
+                    .textFieldStyle(.roundedBorder)
             }
-            Toggle("Échéance", isOn: Binding(
-                get: { card.due != nil },
-                set: { card.due = $0 ? (card.due ?? .now) : nil }))
-            if let due = card.due {
-                DatePicker("Date", selection: Binding(get: { due }, set: { card.due = $0 }),
-                           displayedComponents: .date)
+            field("Priorité") {
+                Picker("", selection: $card.priority) {
+                    ForEach(Priority.allCases) { Text($0.label).tag($0) }
+                }.pickerStyle(.segmented).frame(maxWidth: .infinity)
+            }
+            field("Statut") {
+                Picker("", selection: $card.status) {
+                    ForEach(Status.allCases) { Text($0.label).tag($0) }
+                }.pickerStyle(.segmented).frame(maxWidth: .infinity)
+            }
+            HStack {
+                Toggle("Échéance", isOn: Binding(
+                    get: { card.due != nil },
+                    set: { card.due = $0 ? (card.due ?? .now) : nil }))
+                Spacer()
+                if let due = card.due {
+                    DatePicker("", selection: Binding(get: { due }, set: { card.due = $0 }),
+                               displayedComponents: .date).labelsHidden()
+                }
             }
             HStack {
                 if !isNew { Button("Supprimer", role: .destructive) { onDelete(card.id); dismiss() } }
                 Spacer()
                 Button("Annuler", role: .cancel) { dismiss() }.keyboardShortcut(.cancelAction)
                 Button("Enregistrer") { onSave(card); dismiss() }
+                    .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
                     .disabled(card.title.trimmingCharacters(in: .whitespaces).isEmpty)
             }
-            .padding(.top, 8)
+            .controlSize(.large)
         }
-        .formStyle(.grouped)
-        .frame(width: 400)
+        .multilineTextAlignment(.leading)
+        .padding(24)
+        .frame(width: 420)
+    }
+
+    private func field<C: View>(_ label: String, @ViewBuilder _ content: () -> C) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label).font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
+            content()
+        }
     }
 }

@@ -3,6 +3,6 @@ import PackageDescription
 
 let package = Package(
     name: "Kanban",
-    platforms: [.macOS(.v15)],
+    platforms: [.macOS("26.0")],
     targets: [.executableTarget(name: "Kanban", swiftSettings: [.swiftLanguageMode(.v5)])]
 )
