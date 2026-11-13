@@ -23,6 +23,21 @@ struct Card: Identifiable, Codable {
     var priority = Priority.medium
     var due: Date?
     var status = Status.todo
+    var tags: [String] = []
+}
+
+// Tolerant decoding so cards saved before a field existed still load.
+extension Card {
+    init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
+        notes = try c.decodeIfPresent(String.self, forKey: .notes) ?? ""
+        priority = try c.decodeIfPresent(Priority.self, forKey: .priority) ?? .medium
+        due = try c.decodeIfPresent(Date.self, forKey: .due)
+        status = try c.decodeIfPresent(Status.self, forKey: .status) ?? .todo
+        tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
+    }
 }
 
 // MARK: - Store (JSON in ~/Library/Application Support/Kanban)
@@ -39,6 +54,8 @@ struct Card: Identifiable, Codable {
 
     init() { cards = (try? JSONDecoder().decode([Card].self, from: Data(contentsOf: url))) ?? [] }
 
+    var allTags: [String] { Array(Set(cards.flatMap(\.tags))).sorted() }
+
     private func save() { try? JSONEncoder().encode(cards).write(to: url, options: .atomic) }
 
     func upsert(_ card: Card) {
@@ -46,7 +63,9 @@ struct Card: Identifiable, Codable {
     }
 
     func move(_ ids: [String], to status: Status) {
-        for i in cards.indices where ids.contains(cards[i].id.uuidString) { cards[i].status = status }
+        var next = cards  // single assignment = single save
+        for i in next.indices where ids.contains(next[i].id.uuidString) { next[i].status = status }
+        withAnimation(.snappy(duration: 0.25)) { cards = next }
     }
 }
 
@@ -80,12 +99,63 @@ struct Logo: Shape {
     }
 }
 
+struct LogoMark: View {
+    var body: some View {
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(LinearGradient(colors: [.blue, .purple], startPoint: .topLeading, endPoint: .bottomTrailing))
+            .overlay(Logo().fill(.white).padding(6))
+            .frame(width: 28, height: 28)
+    }
+}
+
+// MARK: - Tags
+
+struct TagChip: View {
+    let tag: String
+    var on = true
+    private var color: Color {
+        let palette: [Color] = [.blue, .pink, .orange, .teal, .indigo, .mint, .brown, .cyan]
+        return palette[tag.unicodeScalars.reduce(5381) { ($0 &* 33 &+ Int($1.value)) & 0xFFFFFF } % palette.count]
+    }
+    var body: some View {
+        Text(tag).font(.caption.weight(.medium)).foregroundStyle(color)
+            .padding(.horizontal, 8).padding(.vertical, 3)
+            .background(color.opacity(on ? 0.16 : 0.05), in: Capsule())
+            .opacity(on ? 1 : 0.55)
+    }
+}
+
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 6
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        arrange(proposal.width ?? .infinity, subviews).size
+    }
+    func placeSubviews(in b: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        for (v, p) in zip(subviews, arrange(b.width, subviews).points) {
+            v.place(at: CGPoint(x: b.minX + p.x, y: b.minY + p.y), proposal: .unspecified)
+        }
+    }
+    private func arrange(_ width: CGFloat, _ subviews: Subviews) -> (size: CGSize, points: [CGPoint]) {
+        var x = 0.0, y = 0.0, rowH = 0.0, maxW = 0.0
+        var points: [CGPoint] = []
+        for v in subviews {
+            let sz = v.sizeThatFits(.unspecified)
+            if x > 0 && x + sz.width > width { x = 0; y += rowH + spacing; rowH = 0 }
+            points.append(CGPoint(x: x, y: y))
+            x += sz.width + spacing; rowH = max(rowH, sz.height); maxW = max(maxW, x - spacing)
+        }
+        return (CGSize(width: maxW, height: y + rowH), points)
+    }
+}
+
 // MARK: - Main view
 
 struct ContentView: View {
     @StateObject private var store = Store()
     @State private var editing: Card?
     @State private var filter: Priority?
+    @State private var filterTag: String?
+    @State private var showFilter = false
     @State private var confirmClear = false
 
     var body: some View {
@@ -104,7 +174,7 @@ struct ContentView: View {
         }
         .background(.background)
         .sheet(item: $editing) { card in
-            EditView(card: card, isNew: !store.cards.contains { $0.id == card.id },
+            EditView(card: card, allTags: store.allTags, isNew: !store.cards.contains { $0.id == card.id },
                      onSave: store.upsert,
                      onDelete: { id in store.cards.removeAll { $0.id == id } })
         }
@@ -115,21 +185,14 @@ struct ContentView: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            Logo().fill(LinearGradient(colors: [.blue, .purple], startPoint: .top, endPoint: .bottom))
-                .frame(width: 22, height: 22)
+            LogoMark()
             Text("Kanban").font(.title3.weight(.semibold))
             Spacer()
             GlassEffectContainer(spacing: 8) {
                 HStack(spacing: 8) {
-                    Menu {
-                        Picker("Priorité", selection: $filter) {
-                            Text("Toutes").tag(Priority?.none)
-                            ForEach(Priority.allCases) { Text($0.label).tag(Optional($0)) }
-                        }.pickerStyle(.inline)
-                    } label: {
-                        icon("line.3.horizontal.decrease", filter == nil ? .primary : .accentColor)
-                    }
-                    .menuStyle(.button).menuIndicator(.hidden).help("Filtrer par priorité")
+                    iconButton("line.3.horizontal.decrease", "Filtrer",
+                               filter == nil && filterTag == nil ? .primary : .accentColor) { showFilter = true }
+                        .popover(isPresented: $showFilter, arrowEdge: .bottom) { filterPanel }
                     iconButton("trash", "Supprimer les cartes terminées", .red) { confirmClear = true }
                     iconButton("plus", "Nouvelle carte", .accentColor) { editing = Card() }
                         .keyboardShortcut("n")
@@ -139,6 +202,29 @@ struct ContentView: View {
         }
         .padding(.horizontal, 16)
         .frame(height: 52)
+    }
+
+    private var filterPanel: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Priorité").font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
+            Picker("", selection: $filter) {
+                Text("Toutes").tag(Priority?.none)
+                ForEach(Priority.allCases) { Text($0.label).tag(Optional($0)) }
+            }.pickerStyle(.segmented).labelsHidden()
+            if !store.allTags.isEmpty {
+                Text("Tag").font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
+                FlowLayout {
+                    ForEach(store.allTags, id: \.self) { tag in
+                        TagChip(tag: tag, on: filterTag == tag)
+                            .onTapGesture { filterTag = filterTag == tag ? nil : tag }
+                    }
+                }
+            }
+            if filter != nil || filterTag != nil {
+                Button("Réinitialiser") { filter = nil; filterTag = nil }
+            }
+        }
+        .padding(16).frame(width: 300)
     }
 
     private func icon(_ name: String, _ tint: Color) -> some View {
@@ -152,7 +238,8 @@ struct ContentView: View {
 
     private func cards(in status: Status) -> [Card] {
         store.cards
-            .filter { $0.status == status && (filter == nil || $0.priority == filter) }
+            .filter { $0.status == status && (filter == nil || $0.priority == filter)
+                && (filterTag == nil || $0.tags.contains(filterTag!)) }
             .sorted { a, b in
                 a.priority != b.priority ? a.priority.rawValue > b.priority.rawValue
                     : (a.due ?? .distantFuture) < (b.due ?? .distantFuture)
@@ -183,7 +270,7 @@ struct ColumnView: View {
             }
             .padding(.horizontal, 16).padding(.vertical, 12)
             ScrollView {
-                LazyVStack(spacing: 8) {
+                VStack(spacing: 8) {
                     ForEach(cards) { card in
                         CardView(card: card)
                             .onTapGesture { onEdit(card) }
@@ -221,14 +308,14 @@ struct CardView: View {
                         .font(.caption).foregroundStyle(late ? .red : .secondary)
                 }
             }
+            if !card.tags.isEmpty {
+                FlowLayout(spacing: 4) { ForEach(card.tags, id: \.self) { TagChip(tag: $0) } }
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 10).padding(.leading, 16).padding(.trailing, 10)
+        .padding(10)
         .background(.background.shadow(.drop(color: .black.opacity(0.08), radius: 5, y: 2)),
                     in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(alignment: .leading) {
-            Capsule().fill(card.priority.color).frame(width: 4).padding(.vertical, 8).padding(.leading, 3)
-        }
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(.quaternary.opacity(0.6)))
         .opacity(card.status == .done ? 0.6 : 1)
         .contentShape(Rectangle())
@@ -239,6 +326,8 @@ struct CardView: View {
 
 struct EditView: View {
     @State var card: Card
+    let allTags: [String]
+    @State private var newTag = ""
     let isNew: Bool
     let onSave: (Card) -> Void
     let onDelete: (UUID) -> Void
@@ -251,6 +340,23 @@ struct EditView: View {
             field("Notes") {
                 TextField("", text: $card.notes, axis: .vertical).lineLimit(3...6)
                     .textFieldStyle(.roundedBorder)
+            }
+            field("Tags") {
+                FlowLayout {
+                    ForEach(Array(Set(allTags + card.tags)).sorted(), id: \.self) { tag in
+                        let on = card.tags.contains(tag)
+                        TagChip(tag: tag, on: on).onTapGesture {
+                            if on { card.tags.removeAll { $0 == tag } } else { card.tags.append(tag) }
+                        }
+                    }
+                }
+                TextField("Nouveau tag, puis Entrée", text: $newTag)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit {
+                        let t = newTag.trimmingCharacters(in: .whitespaces)
+                        if !t.isEmpty && !card.tags.contains(t) { card.tags.append(t) }
+                        newTag = ""
+                    }
             }
             field("Priorité") {
                 Picker("", selection: $card.priority) {
