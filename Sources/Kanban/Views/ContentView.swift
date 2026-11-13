@@ -13,6 +13,8 @@ struct ContentView: View {
     @State private var dragPoint = CGPoint.zero
     @State private var frames: [Status: CGRect] = [:]
     @State private var confirmClear = false
+    @State private var showTemplates = false
+    @State private var pending: Template?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -55,6 +57,16 @@ struct ContentView: View {
                      onSave: store.upsert,
                      onDelete: { id in store.cards.removeAll { $0.id == id } })
         }
+        .sheet(isPresented: $showTemplates) {
+            TemplatesView { t in
+                if store.cards.isEmpty { store.cards = t.makeCards() } else { pending = t }
+            }
+        }
+        .confirmationDialog("Appliquer « \(pending?.name ?? "") » ?", isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } }),
+                            titleVisibility: .visible) {
+            Button("Remplacer le tableau", role: .destructive) { if let t = pending { store.cards = t.makeCards() } }
+            Button("Ajouter au tableau") { if let t = pending { store.cards += t.makeCards() } }
+        }
         .confirmationDialog("Supprimer toutes les cartes terminées ?", isPresented: $confirmClear) {
             Button("Supprimer", role: .destructive) { store.cards.removeAll { $0.status == .done } }
         }
@@ -81,6 +93,7 @@ struct ContentView: View {
                     IconButton("line.3.horizontal.decrease", "Filtrer",
                                filter == nil && filterTag == nil ? .primary : .accentColor) { showFilter = true }
                         .popover(isPresented: $showFilter, arrowEdge: .bottom) { FilterPanel(filter: $filter, tag: $filterTag, tags: store.allTags) }
+                    IconButton("square.grid.2x2", "Modèles") { showTemplates = true }
                     IconButton("trash", "Supprimer les cartes terminées", .red) { confirmClear = true }
                     IconButton("plus", "Nouvelle carte", .accentColor) { editing = Card() }
                         .keyboardShortcut("n")
