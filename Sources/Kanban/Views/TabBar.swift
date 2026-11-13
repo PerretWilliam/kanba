@@ -49,8 +49,10 @@ private struct TabItem: View {
         .overlay(alignment: .top) { if selected { Rectangle().fill(Color.accentColor).frame(height: 2) } }
         .overlay(alignment: .trailing) { Rectangle().fill(.quaternary).frame(width: 1) }
         .contentShape(Rectangle())
-        .onTapGesture(count: 2, perform: onRename)
+        // Select on first click: a plain onTapGesture(count: 2) next to a single tap delays the single one
+        // by the system double-click interval.
         .onTapGesture(perform: onSelect)
+        .simultaneousGesture(TapGesture(count: 2).onEnded(onRename))
         .onHover { hover = $0 }
         .contextMenu {
             Button("Renommer…", action: onRename)
