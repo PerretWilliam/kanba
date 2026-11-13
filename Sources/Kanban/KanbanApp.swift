@@ -374,6 +374,7 @@ struct EditView: View {
     @State var card: Card
     let allTags: [String]
     @State private var newTag = ""
+    @State private var showCalendar = false
     let isNew: Bool
     let onSave: (Card) -> Void
     let onDelete: (UUID) -> Void
@@ -407,12 +408,12 @@ struct EditView: View {
             field("Priorité") {
                 Picker("", selection: $card.priority) {
                     ForEach(Priority.allCases) { Text($0.label).tag($0) }
-                }.pickerStyle(.segmented).frame(maxWidth: .infinity)
+                }.pickerStyle(.segmented).fixedSize().frame(maxWidth: .infinity, alignment: .leading)
             }
             field("Statut") {
                 Picker("", selection: $card.status) {
                     ForEach(Status.allCases) { Text($0.label).tag($0) }
-                }.pickerStyle(.segmented).frame(maxWidth: .infinity)
+                }.pickerStyle(.segmented).fixedSize().frame(maxWidth: .infinity, alignment: .leading)
             }
             HStack {
                 Toggle("Échéance", isOn: Binding(
@@ -420,8 +421,13 @@ struct EditView: View {
                     set: { card.due = $0 ? (card.due ?? .now) : nil }))
                 Spacer()
                 if let due = card.due {
-                    DatePicker("", selection: Binding(get: { due }, set: { card.due = $0 }),
-                               displayedComponents: .date).labelsHidden()
+                    Button(due.formatted(.dateTime.day().month(.wide).year())) { showCalendar = true }
+                        .buttonStyle(.glass)
+                        .popover(isPresented: $showCalendar, arrowEdge: .bottom) {
+                            DatePicker("", selection: Binding(get: { due }, set: { card.due = $0 }),
+                                       displayedComponents: .date)
+                                .datePickerStyle(.graphical).labelsHidden().padding(12)
+                        }
                 }
             }
             HStack {
