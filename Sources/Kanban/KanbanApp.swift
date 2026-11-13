@@ -6,7 +6,7 @@ enum Status: String, Codable, CaseIterable, Identifiable {
     case todo, doing, done
     var id: Self { self }
     var label: String { ["todo": "À faire", "doing": "En cours", "done": "Terminé"][rawValue]! }
-    var color: Color { switch self { case .todo: .gray; case .doing: .blue; case .done: .green } }
+    var color: Color { switch self { case .todo: .purple; case .doing: .blue; case .done: .green } }
 }
 
 enum Priority: Int, Codable, CaseIterable, Identifiable {
@@ -54,13 +54,13 @@ struct Card: Identifiable, Codable {
 
 @main struct KanbanApp: App {
     var body: some Scene {
-        Window("Kanban", id: "main") {
+        Window("", id: "main") {
             ContentView()
                 .environment(\.locale, Locale(identifier: "fr_FR"))
                 .frame(minWidth: 760, minHeight: 440)
+                .toolbar(removing: .title)
         }
-        .windowStyle(.hiddenTitleBar)
-        .windowBackgroundDragBehavior(.enabled)
+        .windowToolbarStyle(.unifiedCompact)
         .defaultSize(width: 1100, height: 700)
     }
 }
@@ -115,7 +115,8 @@ struct ContentView: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            Logo().fill(.tint).frame(width: 20, height: 20)
+            Logo().fill(LinearGradient(colors: [.blue, .purple], startPoint: .top, endPoint: .bottom))
+                .frame(width: 22, height: 22)
             Text("Kanban").font(.title3.weight(.semibold))
             Spacer()
             Menu {
@@ -124,22 +125,25 @@ struct ContentView: View {
                     ForEach(Priority.allCases) { Text($0.label).tag(Optional($0)) }
                 }.pickerStyle(.inline)
             } label: {
-                Image(systemName: "line.3.horizontal.decrease.circle" + (filter == nil ? "" : ".fill"))
-                    .font(.system(size: 16)).frame(width: 30, height: 30)
+                icon("line.3.horizontal.decrease", tint: filter == nil ? .secondary : .accentColor)
             }
-            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+            .menuStyle(.button).buttonStyle(.borderless).menuIndicator(.hidden).fixedSize()
             .help("Filtrer par priorité")
-            iconButton("trash", "Supprimer les cartes terminées") { confirmClear = true }
-            iconButton("plus.circle.fill", "Nouvelle carte") { editing = Card() }
+            iconButton("trash", "Supprimer les cartes terminées", tint: .red) { confirmClear = true }
+            iconButton("plus", "Nouvelle carte", tint: .accentColor) { editing = Card() }
                 .keyboardShortcut("n")
         }
-        .padding(.leading, 78).padding(.trailing, 16)
+        .padding(.horizontal, 16)
         .frame(height: 52)
     }
 
-    private func iconButton(_ icon: String, _ tip: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) { Image(systemName: icon).font(.system(size: 16)).frame(width: 30, height: 30) }
-            .buttonStyle(.borderless).help(tip)
+    private func icon(_ name: String, tint: Color) -> some View {
+        Image(systemName: name).font(.system(size: 15, weight: .medium)).foregroundStyle(tint)
+            .frame(width: 32, height: 32)
+    }
+
+    private func iconButton(_ name: String, _ tip: String, tint: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) { icon(name, tint: tint) }.buttonStyle(.borderless).help(tip)
     }
 
     private func cards(in status: Status) -> [Card] {
@@ -166,11 +170,12 @@ struct ColumnView: View {
         VStack(spacing: 0) {
             HStack {
                 Circle().fill(status.color).frame(width: 8, height: 8)
-                Text(status.label).fontWeight(.semibold)
-                Text("\(cards.count)").foregroundStyle(.secondary)
+                Text(status.label).fontWeight(.semibold).foregroundStyle(status.color)
+                Text("\(cards.count)").font(.caption.weight(.semibold)).foregroundStyle(status.color)
+                    .padding(.horizontal, 6).background(status.color.opacity(0.18), in: Capsule())
                 Spacer()
                 Button(action: onAdd) { Image(systemName: "plus") }
-                    .buttonStyle(.borderless).help("Ajouter une carte dans « \(status.label) »")
+                    .buttonStyle(.borderless).foregroundStyle(status.color).help("Ajouter une carte dans « \(status.label) »")
             }
             .padding(.horizontal, 12).padding(.vertical, 10)
             ScrollView {
@@ -185,7 +190,7 @@ struct ColumnView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.quaternary.opacity(targeted ? 1 : 0.5), in: RoundedRectangle(cornerRadius: 12))
+        .background(status.color.opacity(targeted ? 0.22 : 0.1), in: RoundedRectangle(cornerRadius: 12))
         .dropDestination(for: String.self) { ids, _ in onDrop(ids); return true } isTargeted: { targeted = $0 }
     }
 }
@@ -196,23 +201,29 @@ struct CardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Circle().fill(card.priority.color).frame(width: 8, height: 8)
-                    .help("Priorité \(card.priority.label.lowercased())")
                 Text(card.title).fontWeight(.medium).lineLimit(3)
                     .strikethrough(card.status == .done)
             }
             if !card.notes.isEmpty {
                 Text(card.notes).font(.callout).foregroundStyle(.secondary).lineLimit(2)
             }
-            if let due = card.due {
-                let late = card.status != .done && due < Calendar.current.startOfDay(for: .now)
-                Label(due.formatted(.dateTime.day().month(.abbreviated)), systemImage: "calendar")
-                    .font(.caption).foregroundStyle(late ? .red : .secondary)
+            HStack(spacing: 8) {
+                Text(card.priority.label).font(.caption.weight(.semibold)).foregroundStyle(card.priority.color)
+                    .padding(.horizontal, 7).padding(.vertical, 2)
+                    .background(card.priority.color.opacity(0.15), in: Capsule())
+                if let due = card.due {
+                    let late = card.status != .done && due < Calendar.current.startOfDay(for: .now)
+                    Label(due.formatted(.dateTime.day().month(.abbreviated)), systemImage: "calendar")
+                        .font(.caption).foregroundStyle(late ? .red : .secondary)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
+        .padding(.vertical, 10).padding(.leading, 16).padding(.trailing, 10)
         .background(.background, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(alignment: .leading) {
+            Capsule().fill(card.priority.color).frame(width: 4).padding(.vertical, 8).padding(.leading, 3)
+        }
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(.quaternary))
         .opacity(card.status == .done ? 0.6 : 1)
         .contentShape(Rectangle())
