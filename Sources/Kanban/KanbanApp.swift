@@ -100,6 +100,7 @@ struct Logo: Shape {
 }
 
 extension Font {
+    static func mono(_ size: CGFloat, _ weight: Weight = .regular) -> Font { .custom("JetBrains Mono", size: size).weight(weight) }
     static func inter(_ size: CGFloat, _ weight: Weight = .regular) -> Font { .custom("Inter", size: size).weight(weight) }
 }
 
@@ -220,7 +221,7 @@ struct ContentView: View {
     private var header: some View {
         HStack(spacing: 10) {
             LogoMark()
-            Text("Kanban").font(.custom("JetBrains Mono", size: 18).weight(.bold))
+            Text("Kanban").font(.mono(18, .bold))
             Spacer()
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
@@ -315,7 +316,7 @@ struct ColumnView: View {
         VStack(spacing: 0) {
             HStack {
                 Circle().fill(status.color).frame(width: 8, height: 8)
-                Text(status.label).fontWeight(.semibold).foregroundStyle(status.color)
+                Text(status.label).font(.mono(13, .bold)).foregroundStyle(status.color)
                 Text("\(cards.count)").font(.inter(11, .semibold)).foregroundStyle(status.color)
                     .padding(.horizontal, 6).background(status.color.opacity(0.18), in: Capsule())
                 Spacer()
@@ -354,7 +355,7 @@ struct CardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(card.title).fontWeight(.medium).lineLimit(3)
+                Text(card.title).font(.mono(13, .medium)).lineLimit(3)
                     .strikethrough(card.status == .done)
             }
             if !card.notes.isEmpty {
