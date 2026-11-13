@@ -113,7 +113,9 @@ struct LogoMark: View {
 struct TagChip: View {
     let tag: String
     var on = true
+    var tint: Color?
     private var color: Color {
+        if let tint { return tint }
         let palette: [Color] = [.blue, .pink, .orange, .teal, .indigo, .mint, .brown, .cyan]
         return palette[tag.unicodeScalars.reduce(5381) { ($0 &* 33 &+ Int($1.value)) & 0xFFFFFF } % palette.count]
     }
@@ -122,6 +124,7 @@ struct TagChip: View {
             .padding(.horizontal, 8).padding(.vertical, 3)
             .background(color.opacity(on ? 0.16 : 0.05), in: Capsule())
             .opacity(on ? 1 : 0.55)
+            .animation(.snappy(duration: 0.2), value: on)
     }
 }
 
@@ -194,8 +197,10 @@ struct ContentView: View {
                     .shadow(color: .black.opacity(0.25), radius: 14, y: 8)
                     .position(dragPoint)
                     .allowsHitTesting(false)
+                    .transition(.scale(scale: 0.96).combined(with: .opacity))
             }
         }
+        .animation(.snappy(duration: 0.2), value: dragging != nil)
         .background(.background)
         .sheet(item: $editing) { card in
             EditView(card: card, allTags: store.allTags, isNew: !store.cards.contains { $0.id == card.id },
@@ -242,10 +247,12 @@ struct ContentView: View {
     private var filterPanel: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Priorité").font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
-            Picker("", selection: $filter) {
-                Text("Toutes").tag(Priority?.none)
-                ForEach(Priority.allCases) { Text($0.label).tag(Optional($0)) }
-            }.pickerStyle(.segmented).labelsHidden()
+            FlowLayout {
+                ForEach(Priority.allCases) { p in
+                    TagChip(tag: p.label, on: filter == p, tint: p.color)
+                        .onTapGesture { filter = filter == p ? nil : p }
+                }
+            }
             if !store.allTags.isEmpty {
                 Text("Tag").font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
                 FlowLayout {
@@ -259,7 +266,7 @@ struct ContentView: View {
                 Button("Réinitialiser") { filter = nil; filterTag = nil }
             }
         }
-        .padding(16).frame(width: 300)
+        .padding(16).frame(width: 300, alignment: .leading)
         .buttonStyle(.automatic).buttonBorderShape(.automatic).controlSize(.regular)
     }
 
@@ -315,6 +322,7 @@ struct ColumnView: View {
                 VStack(spacing: 8) {
                     ForEach(cards) { card in
                         CardView(card: card)
+                            .transition(.scale(scale: 0.96).combined(with: .opacity))
                             .opacity(draggingID == card.id ? 0.25 : 1)
                             .pointerStyle(draggingID != nil ? .grabActive : .grabIdle)
                             .onTapGesture { onEdit(card) }
@@ -324,16 +332,19 @@ struct ColumnView: View {
                     }
                 }
                 .padding([.horizontal, .bottom], 12)
+                .animation(.snappy(duration: 0.25), value: cards.map(\.id))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(status.color.opacity(highlighted ? 0.2 : 0.09), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .animation(.easeOut(duration: 0.15), value: highlighted)
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("board")) } action: { onFrame($0) }
     }
 }
 
 struct CardView: View {
     let card: Card
+    @State private var hover = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -365,6 +376,9 @@ struct CardView: View {
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(.quaternary.opacity(0.6)))
         .opacity(card.status == .done ? 0.6 : 1)
         .contentShape(Rectangle())
+        .scaleEffect(hover ? 1.012 : 1)
+        .animation(.easeOut(duration: 0.15), value: hover)
+        .onHover { hover = $0 }
     }
 }
 
