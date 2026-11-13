@@ -56,6 +56,7 @@ struct ColumnView: View {
                 .padding([.horizontal, .bottom], 12)
                 .animation(.snappy(duration: 0.25), value: cards.map(\.id))
             }
+            .scrollBounceBehavior(.basedOnSize)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(tint.opacity(highlighted ? (scheme == .dark ? 0.28 : 0.2) : (scheme == .dark ? 0.16 : 0.09)), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
