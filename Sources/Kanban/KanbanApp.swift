@@ -99,6 +99,10 @@ struct Logo: Shape {
     }
 }
 
+extension Font {
+    static func inter(_ size: CGFloat, _ weight: Weight = .regular) -> Font { .custom("Inter", size: size).weight(weight) }
+}
+
 struct LogoMark: View {
     var body: some View {
         RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -120,7 +124,7 @@ struct TagChip: View {
         return palette[tag.unicodeScalars.reduce(5381) { ($0 &* 33 &+ Int($1.value)) & 0xFFFFFF } % palette.count]
     }
     var body: some View {
-        Text(tag).font(.caption.weight(.medium)).foregroundStyle(color)
+        Text(tag).font(.inter(11, .medium)).foregroundStyle(color)
             .padding(.horizontal, 8).padding(.vertical, 3)
             .background(color.opacity(on ? 0.16 : 0.05), in: Capsule())
             .opacity(on ? 1 : 0.55)
@@ -202,6 +206,7 @@ struct ContentView: View {
         }
         .animation(.snappy(duration: 0.2), value: dragging != nil)
         .background(.background)
+        .font(.inter(13))
         .sheet(item: $editing) { card in
             EditView(card: card, allTags: store.allTags, isNew: !store.cards.contains { $0.id == card.id },
                      onSave: store.upsert,
@@ -215,7 +220,7 @@ struct ContentView: View {
     private var header: some View {
         HStack(spacing: 10) {
             LogoMark()
-            Text("Kanban").font(.title3.weight(.semibold))
+            Text("Kanban").font(.custom("JetBrains Mono", size: 18).weight(.bold))
             Spacer()
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
@@ -246,7 +251,7 @@ struct ContentView: View {
 
     private var filterPanel: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Priorité").font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
+            Text("Priorité").font(.inter(12, .medium)).foregroundStyle(.secondary)
             FlowLayout {
                 ForEach(Priority.allCases) { p in
                     TagChip(tag: p.label, on: filter == p, tint: p.color)
@@ -254,7 +259,7 @@ struct ContentView: View {
                 }
             }
             if !store.allTags.isEmpty {
-                Text("Tag").font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
+                Text("Tag").font(.inter(12, .medium)).foregroundStyle(.secondary)
                 FlowLayout {
                     ForEach(store.allTags, id: \.self) { tag in
                         TagChip(tag: tag, on: filterTag == tag)
@@ -311,7 +316,7 @@ struct ColumnView: View {
             HStack {
                 Circle().fill(status.color).frame(width: 8, height: 8)
                 Text(status.label).fontWeight(.semibold).foregroundStyle(status.color)
-                Text("\(cards.count)").font(.caption.weight(.semibold)).foregroundStyle(status.color)
+                Text("\(cards.count)").font(.inter(11, .semibold)).foregroundStyle(status.color)
                     .padding(.horizontal, 6).background(status.color.opacity(0.18), in: Capsule())
                 Spacer()
                 Button(action: onAdd) { Image(systemName: "plus") }
@@ -353,16 +358,16 @@ struct CardView: View {
                     .strikethrough(card.status == .done)
             }
             if !card.notes.isEmpty {
-                Text(card.notes).font(.callout).foregroundStyle(.secondary).lineLimit(2)
+                Text(card.notes).font(.inter(12)).foregroundStyle(.secondary).lineLimit(2)
             }
             HStack(spacing: 8) {
-                Text(card.priority.label).font(.caption.weight(.semibold)).foregroundStyle(card.priority.color)
+                Text(card.priority.label).font(.inter(11, .semibold)).foregroundStyle(card.priority.color)
                     .padding(.horizontal, 7).padding(.vertical, 2)
                     .background(card.priority.color.opacity(0.15), in: Capsule())
                 if let due = card.due {
                     let late = card.status != .done && due < Calendar.current.startOfDay(for: .now)
                     Label(due.formatted(.dateTime.day().month(.abbreviated)), systemImage: "calendar")
-                        .font(.caption).foregroundStyle(late ? .red : .secondary)
+                        .font(.inter(11)).foregroundStyle(late ? .red : .secondary)
                 }
             }
             if !card.tags.isEmpty {
@@ -396,7 +401,7 @@ struct EditView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(isNew ? "Nouvelle carte" : "Modifier la carte").font(.title3.weight(.semibold))
+            Text(isNew ? "Nouvelle carte" : "Modifier la carte").font(.inter(17, .semibold))
             field("Titre") { TextField("", text: $card.title).textFieldStyle(.roundedBorder) }
             field("Notes") {
                 TextField("", text: $card.notes, axis: .vertical).lineLimit(3...6)
@@ -456,13 +461,14 @@ struct EditView: View {
             .controlSize(.large)
         }
         .multilineTextAlignment(.leading)
+        .font(.inter(13))
         .padding(24)
         .frame(width: 420)
     }
 
     private func field<C: View>(_ label: String, @ViewBuilder _ content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(label).font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
+            Text(label).font(.inter(12, .medium)).foregroundStyle(.secondary)
             content()
         }
     }
