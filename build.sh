@@ -6,6 +6,7 @@ swift build -c release
 APP=Kanban.app
 rm -rf $APP && mkdir -p $APP/Contents/MacOS
 cp .build/release/Kanban $APP/Contents/MacOS/
+mkdir -p $APP/Contents/Resources && cp -R Fonts $APP/Contents/Resources/Fonts
 cat > $APP/Contents/Info.plist <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -17,6 +18,7 @@ cat > $APP/Contents/Info.plist <<PLIST
 <key>CFBundleShortVersionString</key><string>1.0</string>
 <key>CFBundleDevelopmentRegion</key><string>fr</string>
 <key>LSMinimumSystemVersion</key><string>26.0</string>
+<key>ATSApplicationFontsPath</key><string>Fonts</string>
 <key>NSHighResolutionCapable</key><true/>
 </dict></plist>
 PLIST
