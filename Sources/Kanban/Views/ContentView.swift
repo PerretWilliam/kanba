@@ -57,6 +57,7 @@ struct ContentView: View {
             }
             .padding([.horizontal, .bottom], 14)
             .frame(maxHeight: .infinity)
+            .id(store.selected)  // fresh subtree per tab: no card/column transitions between boards
         }
         .coordinateSpace(name: "board")
         .pointerStyle(dragging != nil ? .grabActive : nil)

@@ -4,7 +4,8 @@ import SwiftUI
 
 @MainActor final class Store: ObservableObject {
     @Published var boards: [Board] = [] { didSet { save() } }
-    @Published var selected = UUID() { didSet { save() } }
+    // Kept out of boards.json writes: switching tabs must not re-encode every board.
+    @Published var selected = UUID() { didSet { UserDefaults.standard.set(selected.uuidString, forKey: "selectedBoard") } }
 
     private struct Saved: Codable { var boards: [Board]; var selected: UUID }
     private let dir: URL = {
@@ -23,6 +24,7 @@ import SwiftUI
             let old = (try? JSONDecoder().decode([Card].self, from: Data(contentsOf: dir.appendingPathComponent("cards.json")))) ?? []
             boards = [Board(name: "Mon Kanban", cards: old)]
         }
+        if let id = UserDefaults.standard.string(forKey: "selectedBoard").flatMap(UUID.init), boards.contains(where: { $0.id == id }) { selected = id }
         if !boards.contains(where: { $0.id == selected }) { selected = boards[0].id }
     }
 

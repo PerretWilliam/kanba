@@ -38,12 +38,13 @@ private struct TabItem: View {
             Image(systemName: "rectangle.split.3x1").font(.system(size: 11)).foregroundStyle(selected ? Color.accentColor : .secondary)
             Text(board.name).font(.inter(12, selected ? .medium : .regular)).lineLimit(1)
                 .foregroundStyle(selected ? .primary : .secondary)
+            Spacer(minLength: 12)
             Button(action: onClose) { Image(systemName: "xmark").font(.system(size: 9, weight: .semibold)) }
                 .buttonStyle(.borderless).foregroundStyle(.secondary)
                 .opacity(selected || hover ? 1 : 0).help("Fermer")
         }
         .padding(.horizontal, 12)
-        .frame(minWidth: 90, maxWidth: 200, maxHeight: .infinity)
+        .frame(minWidth: 140, maxWidth: 220, maxHeight: .infinity)
         .background(selected ? AnyShapeStyle(.background) : AnyShapeStyle(hover ? Color.primary.opacity(0.05) : .clear))
         .overlay(alignment: .top) { if selected { Rectangle().fill(Color.accentColor).frame(height: 2) } }
         .overlay(alignment: .trailing) { Rectangle().fill(.quaternary).frame(width: 1) }
