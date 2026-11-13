@@ -156,6 +156,12 @@ struct ContentView: View {
     @State private var filter: Priority?
     @State private var filterTag: String?
     @State private var showFilter = false
+    @State private var query = ""
+    @FocusState private var searchFocused: Bool
+    // Custom drag (system drag-and-drop keeps a "flying" preview for ~0.5s after release)
+    @State private var dragging: Card?
+    @State private var dragPoint = CGPoint.zero
+    @State private var frames: [Status: CGRect] = [:]
     @State private var confirmClear = false
 
     var body: some View {
@@ -164,13 +170,30 @@ struct ContentView: View {
             HStack(spacing: 14) {
                 ForEach(Status.allCases) { status in
                     ColumnView(status: status, cards: cards(in: status),
+                               draggingID: dragging?.id, highlighted: dragging != nil && column(at: dragPoint) == status,
                                onEdit: { editing = $0 },
                                onAdd: { editing = Card(status: status) },
-                               onDrop: { store.move($0, to: status) })
+                               onFrame: { frames[status] = $0 },
+                               onDrag: { card, point in dragging = card; dragPoint = point },
+                               onDrop: { card, point in
+                                   if let to = column(at: point), to != card.status { store.move([card.id.uuidString], to: to) }
+                                   dragging = nil
+                               })
                 }
             }
             .padding([.horizontal, .bottom], 14)
             .frame(maxHeight: .infinity)
+        }
+        .coordinateSpace(name: "board")
+        .overlay {
+            if let card = dragging {
+                CardView(card: card)
+                    .frame(width: max((frames[card.status]?.width ?? 300) - 24, 100))
+                    .scaleEffect(1.03).rotationEffect(.degrees(1.5))
+                    .shadow(color: .black.opacity(0.25), radius: 14, y: 8)
+                    .position(dragPoint)
+                    .allowsHitTesting(false)
+            }
         }
         .background(.background)
         .sheet(item: $editing) { card in
@@ -188,6 +211,17 @@ struct ContentView: View {
             LogoMark()
             Text("Kanban").font(.title3.weight(.semibold))
             Spacer()
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                TextField("Rechercher", text: $query).textFieldStyle(.plain).focused($searchFocused)
+                if !query.isEmpty {
+                    Button { query = "" } label: { Image(systemName: "xmark.circle.fill") }
+                        .buttonStyle(.plain).foregroundStyle(.secondary)
+                }
+                Button("") { searchFocused = true }.keyboardShortcut("f").opacity(0).frame(width: 0)
+            }
+            .padding(.horizontal, 12).frame(width: 220, height: 36)
+            .glassEffect(.regular, in: .capsule)
             GlassEffectContainer(spacing: 8) {
                 HStack(spacing: 8) {
                     iconButton("line.3.horizontal.decrease", "Filtrer",
@@ -236,10 +270,13 @@ struct ContentView: View {
         Button(action: action) { icon(name, tint) }.help(tip)
     }
 
+    private func column(at p: CGPoint) -> Status? { frames.first { $0.value.contains(p) }?.key }
+
     private func cards(in status: Status) -> [Card] {
         store.cards
             .filter { $0.status == status && (filter == nil || $0.priority == filter)
-                && (filterTag == nil || $0.tags.contains(filterTag!)) }
+                && (filterTag == nil || $0.tags.contains(filterTag!))
+                && (query.isEmpty || ([$0.title, $0.notes] + $0.tags).contains { $0.localizedStandardContains(query) }) }
             .sorted { a, b in
                 a.priority != b.priority ? a.priority.rawValue > b.priority.rawValue
                     : (a.due ?? .distantFuture) < (b.due ?? .distantFuture)
@@ -252,10 +289,13 @@ struct ContentView: View {
 struct ColumnView: View {
     let status: Status
     let cards: [Card]
+    let draggingID: UUID?
+    let highlighted: Bool
     let onEdit: (Card) -> Void
     let onAdd: () -> Void
-    let onDrop: ([String]) -> Void
-    @State private var targeted = false
+    let onFrame: (CGRect) -> Void
+    let onDrag: (Card, CGPoint) -> Void
+    let onDrop: (Card, CGPoint) -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -273,16 +313,19 @@ struct ColumnView: View {
                 VStack(spacing: 8) {
                     ForEach(cards) { card in
                         CardView(card: card)
+                            .opacity(draggingID == card.id ? 0.25 : 1)
                             .onTapGesture { onEdit(card) }
-                            .draggable(card.id.uuidString)
+                            .gesture(DragGesture(minimumDistance: 5, coordinateSpace: .named("board"))
+                                .onChanged { onDrag(card, $0.location) }
+                                .onEnded { onDrop(card, $0.location) })
                     }
                 }
                 .padding([.horizontal, .bottom], 12)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(status.color.opacity(targeted ? 0.2 : 0.09), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .dropDestination(for: String.self) { ids, _ in onDrop(ids); return true } isTargeted: { targeted = $0 }
+        .background(status.color.opacity(highlighted ? 0.2 : 0.09), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("board")) } action: { onFrame($0) }
     }
 }
 
