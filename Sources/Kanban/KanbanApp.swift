@@ -185,6 +185,7 @@ struct ContentView: View {
             .frame(maxHeight: .infinity)
         }
         .coordinateSpace(name: "board")
+        .pointerStyle(dragging != nil ? .grabActive : nil)
         .overlay {
             if let card = dragging {
                 CardView(card: card)
@@ -259,6 +260,7 @@ struct ContentView: View {
             }
         }
         .padding(16).frame(width: 300)
+        .buttonStyle(.automatic).buttonBorderShape(.automatic).controlSize(.regular)
     }
 
     private func icon(_ name: String, _ tint: Color) -> some View {
@@ -314,6 +316,7 @@ struct ColumnView: View {
                     ForEach(cards) { card in
                         CardView(card: card)
                             .opacity(draggingID == card.id ? 0.25 : 1)
+                            .pointerStyle(draggingID != nil ? .grabActive : .grabIdle)
                             .onTapGesture { onEdit(card) }
                             .gesture(DragGesture(minimumDistance: 5, coordinateSpace: .named("board"))
                                 .onChanged { onDrag(card, $0.location) }
