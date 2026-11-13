@@ -2,13 +2,14 @@ import SwiftUI
 
 struct CardView: View {
     let card: Card
+    var isDone = false
     @State private var hover = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(card.title).font(.mono(13, .medium)).lineLimit(3)
-                    .strikethrough(card.status == .done)
+                    .strikethrough(isDone)
             }
             if !card.notes.isEmpty {
                 Text(card.notes).font(.inter(12)).foregroundStyle(.secondary).lineLimit(2)
@@ -18,7 +19,7 @@ struct CardView: View {
                     .padding(.horizontal, 7).padding(.vertical, 2)
                     .background(card.priority.color.opacity(0.15), in: Capsule())
                 if let due = card.due {
-                    let late = card.status != .done && due < Calendar.current.startOfDay(for: .now)
+                    let late = !isDone && due < Calendar.current.startOfDay(for: .now)
                     Label(due.formatted(.dateTime.day().month(.abbreviated)), systemImage: "calendar")
                         .font(.inter(11)).foregroundStyle(late ? .red : .secondary)
                 }
@@ -32,7 +33,7 @@ struct CardView: View {
         .background(.background.shadow(.drop(color: .black.opacity(0.08), radius: 5, y: 2)),
                     in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(.quaternary.opacity(0.6)))
-        .opacity(card.status == .done ? 0.6 : 1)
+        .opacity(isDone ? 0.6 : 1)
         .contentShape(Rectangle())
         .scaleEffect(hover ? 1.012 : 1)
         .animation(.easeOut(duration: 0.15), value: hover)

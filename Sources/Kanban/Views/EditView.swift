@@ -3,6 +3,7 @@ import SwiftUI
 struct EditView: View {
     @State var card: Card
     let allTags: [String]
+    let columns: [Column]
     @State private var newTag = ""
     @State private var showCalendar = false
     let isNew: Bool
@@ -40,10 +41,13 @@ struct EditView: View {
                     ForEach(Priority.allCases) { Text($0.label).tag($0) }
                 }.pickerStyle(.segmented).fixedSize().frame(maxWidth: .infinity, alignment: .leading)
             }
-            field("Statut") {
-                Picker("", selection: $card.status) {
-                    ForEach(Status.allCases) { Text($0.label).tag($0) }
-                }.pickerStyle(.segmented).fixedSize().frame(maxWidth: .infinity, alignment: .leading)
+            field("Colonne") {
+                FlowLayout {
+                    ForEach(columns) { col in
+                        TagChip(tag: col.name, on: card.status == col.id, tint: col.color.color)
+                            .onTapGesture { card.status = col.id }
+                    }
+                }
             }
             HStack {
                 Toggle("Échéance", isOn: Binding(

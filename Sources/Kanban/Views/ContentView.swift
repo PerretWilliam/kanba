@@ -2,7 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var store = Store()
-    @State private var editing: Card?
+    @State private var sheet: Sheet?
     @State private var filter: Priority?
     @State private var filterTag: String?
     @State private var showFilter = false
@@ -11,27 +11,49 @@ struct ContentView: View {
     // Custom drag (system drag-and-drop keeps a "flying" preview for ~0.5s after release)
     @State private var dragging: Card?
     @State private var dragPoint = CGPoint.zero
-    @State private var frames: [Status: CGRect] = [:]
+    @State private var frames: [String: CGRect] = [:]
     @State private var confirmClear = false
-    @State private var showTemplates = false
-    @State private var pending: Template?
+
+    private var board: Board { store.board }
+    private func isDone(_ columnID: String) -> Bool { board.columns.count > 1 && board.columns.last?.id == columnID }
+
+    enum Sheet: Identifiable {
+        case edit(Card), new, name(title: String, text: String, apply: (String) -> Void)
+        var id: String {
+            switch self { case .edit(let c): "edit-\(c.id)"; case .new: "new"; case .name(let t, _, _): "name-\(t)" }
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
+            TabBar(boards: store.boards, selected: store.selected,
+                   onSelect: { store.selected = $0 }, onClose: { store.close($0) },
+                   onRename: { b in sheet = .name(title: "Renommer le tableau", text: b.name) { store.rename(b.id, $0) } },
+                   onNew: { sheet = .new })
             header
             HStack(spacing: 14) {
-                ForEach(Status.allCases) { status in
-                    ColumnView(status: status, cards: cards(in: status),
-                               draggingID: dragging?.id, highlighted: dragging != nil && column(at: dragPoint) == status,
-                               onEdit: { editing = $0 },
-                               onAdd: { editing = Card(status: status) },
-                               onFrame: { frames[status] = $0 },
+                ForEach(board.columns) { col in
+                    ColumnView(column: col, isDone: isDone(col.id), canDelete: board.columns.count > 1,
+                               onRename: { sheet = .name(title: "Renommer la colonne", text: col.name) { store.renameColumn(col.id, $0) } },
+                               onColor: { store.recolorColumn(col.id, $0) },
+                               onDeleteColumn: { store.deleteColumn(col.id) },
+                               cards: cards(in: col.id),
+                               draggingID: dragging?.id, highlighted: dragging != nil && column(at: dragPoint) == col.id,
+                               onEdit: { sheet = .edit($0) },
+                               onAdd: { sheet = .edit(Card(status: col.id)) },
+                               onFrame: { frames[col.id] = $0 },
                                onDrag: { card, point in dragging = card; dragPoint = point },
                                onDrop: { card, point in
                                    if let to = column(at: point), to != card.status { store.move([card.id.uuidString], to: to) }
                                    dragging = nil
                                })
+                        .transition(.scale(scale: 0.95).combined(with: .opacity))
                 }
+                Button { sheet = .name(title: "Nouvelle colonne", text: "") { store.addColumn($0) } } label: {
+                    Image(systemName: "plus").foregroundStyle(.secondary).frame(width: 34).frame(maxHeight: .infinity)
+                        .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: 22, style: .continuous))
+                }
+                .buttonStyle(.plain).help("Ajouter une colonne")
             }
             .padding([.horizontal, .bottom], 14)
             .frame(maxHeight: .infinity)
@@ -40,7 +62,7 @@ struct ContentView: View {
         .pointerStyle(dragging != nil ? .grabActive : nil)
         .overlay {
             if let card = dragging {
-                CardView(card: card)
+                CardView(card: card, isDone: isDone(card.status))
                     .frame(width: max((frames[card.status]?.width ?? 300) - 24, 100))
                     .scaleEffect(1.03).rotationEffect(.degrees(1.5))
                     .shadow(color: .black.opacity(0.25), radius: 14, y: 8)
@@ -52,24 +74,22 @@ struct ContentView: View {
         .animation(.snappy(duration: 0.2), value: dragging != nil)
         .background(.background)
         .font(.inter(13))
-        .sheet(item: $editing) { card in
-            EditView(card: card, allTags: store.allTags, isNew: !store.cards.contains { $0.id == card.id },
-                     onSave: store.upsert,
-                     onDelete: { id in store.cards.removeAll { $0.id == id } })
-        }
-        .sheet(isPresented: $showTemplates) {
-            TemplatesView { t in
-                if store.cards.isEmpty { store.cards = t.makeCards() } else { pending = t }
+        .sheet(item: $sheet) { sheet in
+            switch sheet {
+            case .edit(let card):
+                EditView(card: card, allTags: store.allTags, columns: board.columns,
+                         isNew: !board.cards.contains { $0.id == card.id },
+                         onSave: store.upsert, onDelete: store.delete)
+            case .new:
+                TemplatesView { store.add($0) }
+            case .name(let title, let text, let apply):
+                NameSheet(title: title, text: text, onSave: apply)
             }
         }
-        .confirmationDialog("Appliquer « \(pending?.name ?? "") » ?", isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } }),
-                            titleVisibility: .visible) {
-            Button("Remplacer le tableau", role: .destructive) { if let t = pending { store.cards = t.makeCards() } }
-            Button("Ajouter au tableau") { if let t = pending { store.cards += t.makeCards() } }
+        .confirmationDialog("Supprimer toutes les cartes de « \(board.columns.last?.name ?? "") » ?", isPresented: $confirmClear) {
+            Button("Supprimer", role: .destructive) { store.clearLastColumn() }
         }
-        .confirmationDialog("Supprimer toutes les cartes terminées ?", isPresented: $confirmClear) {
-            Button("Supprimer", role: .destructive) { store.cards.removeAll { $0.status == .done } }
-        }
+        .onChange(of: store.selected) { filter = nil; filterTag = nil; query = "" }
     }
 
     private var header: some View {
@@ -93,9 +113,9 @@ struct ContentView: View {
                     IconButton("line.3.horizontal.decrease", "Filtrer",
                                filter == nil && filterTag == nil ? .primary : .accentColor) { showFilter = true }
                         .popover(isPresented: $showFilter, arrowEdge: .bottom) { FilterPanel(filter: $filter, tag: $filterTag, tags: store.allTags) }
-                    IconButton("square.grid.2x2", "Modèles") { showTemplates = true }
-                    IconButton("trash", "Supprimer les cartes terminées", .red) { confirmClear = true }
-                    IconButton("plus", "Nouvelle carte", .accentColor) { editing = Card() }
+                    IconButton("square.and.arrow.up", "Exporter en JSON") { BoardIO.export(board) }
+                    IconButton("trash", "Vider la dernière colonne", .red) { confirmClear = true }
+                    IconButton("plus", "Nouvelle carte", .accentColor) { sheet = .edit(Card(status: board.columns[0].id)) }
                         .keyboardShortcut("n")
                 }
                 .buttonStyle(.glass).buttonBorderShape(.circle).controlSize(.large)
@@ -105,11 +125,14 @@ struct ContentView: View {
         .frame(height: 52)
     }
 
-    private func column(at p: CGPoint) -> Status? { frames.first { $0.value.contains(p) }?.key }
+    private func column(at p: CGPoint) -> String? {
+        let ids = Set(board.columns.map(\.id))
+        return frames.first { ids.contains($0.key) && $0.value.contains(p) }?.key
+    }
 
-    private func cards(in status: Status) -> [Card] {
-        store.cards
-            .filter { $0.status == status && (filter == nil || $0.priority == filter)
+    private func cards(in column: String) -> [Card] {
+        board.cards
+            .filter { $0.status == column && (filter == nil || $0.priority == filter)
                 && (filterTag == nil || $0.tags.contains(filterTag!))
                 && (query.isEmpty || ([$0.title, $0.notes] + $0.tags).contains { $0.localizedStandardContains(query) }) }
             .sorted { a, b in

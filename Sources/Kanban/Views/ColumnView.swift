@@ -2,7 +2,12 @@ import SwiftUI
 
 // Only the card list scrolls, never the page.
 struct ColumnView: View {
-    let status: Status
+    let column: Column
+    let isDone: Bool
+    let canDelete: Bool
+    let onRename: () -> Void
+    let onColor: (ColumnColor) -> Void
+    let onDeleteColumn: () -> Void
     let cards: [Card]
     let draggingID: UUID?
     let highlighted: Bool
@@ -12,23 +17,33 @@ struct ColumnView: View {
     let onDrag: (Card, CGPoint) -> Void
     let onDrop: (Card, CGPoint) -> Void
     @Environment(\.colorScheme) private var scheme
+    private var tint: Color { column.color.color }
 
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Circle().fill(status.color).frame(width: 8, height: 8)
-                Text(status.label).font(.mono(13, .bold)).foregroundStyle(status.color)
-                Text("\(cards.count)").font(.inter(11, .semibold)).foregroundStyle(status.color)
-                    .padding(.horizontal, 6).background(status.color.opacity(0.18), in: Capsule())
+                Circle().fill(tint).frame(width: 8, height: 8)
+                Text(column.name).font(.mono(13, .bold)).foregroundStyle(tint)
+                Text("\(cards.count)").font(.inter(11, .semibold)).foregroundStyle(tint)
+                    .padding(.horizontal, 6).background(tint.opacity(0.18), in: Capsule())
                 Spacer()
                 Button(action: onAdd) { Image(systemName: "plus") }
-                    .buttonStyle(.borderless).foregroundStyle(status.color).help("Ajouter une carte dans « \(status.label) »")
+                    .buttonStyle(.borderless).foregroundStyle(tint).help("Ajouter une carte dans « \(column.name) »")
             }
             .padding(.horizontal, 16).padding(.vertical, 12)
+            .contentShape(Rectangle())
+            .contextMenu {
+                Button("Renommer…", action: onRename)
+                Menu("Couleur") {
+                    ForEach(ColumnColor.allCases) { c in Button(c.label) { onColor(c) } }
+                }
+                Divider()
+                Button("Supprimer la colonne", role: .destructive, action: onDeleteColumn).disabled(!canDelete)
+            }
             ScrollView {
                 VStack(spacing: 8) {
                     ForEach(cards) { card in
-                        CardView(card: card)
+                        CardView(card: card, isDone: isDone)
                             .transition(.scale(scale: 0.96).combined(with: .opacity))
                             .opacity(draggingID == card.id ? 0.25 : 1)
                             .pointerStyle(draggingID != nil ? .grabActive : .grabIdle)
@@ -43,7 +58,7 @@ struct ColumnView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(status.color.opacity(highlighted ? (scheme == .dark ? 0.28 : 0.2) : (scheme == .dark ? 0.16 : 0.09)), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .background(tint.opacity(highlighted ? (scheme == .dark ? 0.28 : 0.2) : (scheme == .dark ? 0.16 : 0.09)), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .animation(.easeOut(duration: 0.15), value: highlighted)
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("board")) } action: { onFrame($0) }
     }
