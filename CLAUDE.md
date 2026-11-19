@@ -1,10 +1,10 @@
 # Kanba
 
-App macOS SwiftUI (`./build.sh`). Données: `~/Library/Application Support/Kanban/boards.json`.
-L'app recharge ce fichier en direct (édition manuelle possible). Les outils MCP n'y écrivent PAS: ils écrivent `proposal.json` (base + état proposé), l'app affiche un diff et l'utilisateur valide (tout ou case par case). Seul `select_board` est immédiat.
-Serveur MCP `kanban` (`tools/mcp.py`, stdlib, enregistré en scope user: `claude mcp add --scope user kanban -- python3 <chemin>/tools/mcp.py`): get_boards (avec recherche/filtres), add_card, update_card, delete_card, clear_last_column, add_column, update_column, delete_column, add_board (colonnes + cartes initiales = templates), update_board, select_board, delete_board, export_board, import_board — préfère-le à l'édition manuelle.
+macOS SwiftUI app (`./build.sh`). Data: `~/Library/Application Support/Kanban/boards.json`.
+The app live-reloads this file (manual edits are fine). MCP tools do NOT write to it: they write `proposal.json` (base + proposed state), the app shows a diff and the user approves (all or change by change). Only `select_board` is immediate.
+MCP server `kanban` (`tools/mcp.py`, stdlib only, user scope: `claude mcp add --scope user kanban -- python3 <path>/tools/mcp.py`): get_boards (search/filters), add_card, update_card, delete_card, clear_last_column, add_column, update_column, delete_column, add_board (initial columns + cards = templates), update_board, select_board, delete_board, export_board, import_board. Prefer it over editing the file by hand.
 
-Format: `{"selected": "<uuid board>", "boards": [Board]}`
-- Board: `{id: uuid, name, columns: [{id, name, color}], cards: [Card]}`; couleurs: gray blue green orange purple pink teal red; la dernière colonne = "terminé".
-- Card: `{id: uuid (nouveau uuid4 majuscule), title, notes, priority: 0|1|2 (basse/moyenne/haute), due?: nombre de secondes depuis 2001-01-01 UTC, status: id de colonne, tags: [string]}`.
-- JSON invalide ou `boards` vide = modification ignorée.
+Format: `{"selected": "<board uuid>", "boards": [Board]}`
+- Board: `{id: uuid, name, columns: [{id, name, color}], cards: [Card]}`; colors: gray blue green orange purple pink teal red; the last column means "done".
+- Card: `{id: uuid (new uppercase uuid4), title, notes, priority: 0|1|2 (low/medium/high), due?: seconds since 2001-01-01 UTC, status: column id, tags: [string]}`.
+- Invalid JSON or empty `boards` = change ignored.
