@@ -42,7 +42,7 @@ enum Priority: Int, Codable, CaseIterable, Identifiable {
     var color: Color { [Color.green, .orange, .red][rawValue] }
 }
 
-struct Card: Identifiable, Codable {
+struct Card: Identifiable, Codable, Equatable {
     var id = UUID()
     var title = ""
     var notes = ""

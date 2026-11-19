@@ -18,9 +18,9 @@ struct ContentView: View {
     private func isDone(_ columnID: String) -> Bool { board.columns.count > 1 && board.columns.last?.id == columnID }
 
     enum Sheet: Identifiable {
-        case edit(Card), new, name(title: String, text: String, apply: (String) -> Void)
+        case edit(Card), new, review, name(title: String, text: String, apply: (String) -> Void)
         var id: String {
-            switch self { case .edit(let c): "edit-\(c.id)"; case .new: "new"; case .name(let t, _, _): "name-\(t)" }
+            switch self { case .edit(let c): "edit-\(c.id)"; case .new: "new"; case .review: "review"; case .name(let t, _, _): "name-\(t)" }
         }
     }
 
@@ -72,6 +72,9 @@ struct ContentView: View {
                     .transition(.scale(scale: 0.96).combined(with: .opacity))
             }
         }
+        .overlay(alignment: .bottom) {
+            if let t = store.toast { ToastView(toast: t).padding(.bottom, 22).transition(.move(edge: .bottom).combined(with: .opacity)) }
+        }
         .animation(.snappy(duration: 0.2), value: dragging != nil)
         .background(.background)
         .font(.inter(13))
@@ -83,6 +86,8 @@ struct ContentView: View {
                          onSave: store.upsert, onDelete: store.delete)
             case .new:
                 TemplatesView { store.add($0) }
+            case .review:
+                ReviewView(store: store)
             case .name(let title, let text, let apply):
                 NameSheet(title: title, text: text, onSave: apply)
             }
@@ -98,6 +103,18 @@ struct ContentView: View {
             LogoMark()
             Text("Kanban").font(.mono(18, .bold))
             Spacer()
+            if let p = store.proposal {
+                Button { sheet = .review } label: {
+                    HStack(spacing: 6) {
+                        ActorIcon(actor: p.actor).frame(width: 14, height: 14)
+                        Text("\(store.review.count) à valider").font(.inter(12, .medium))
+                    }
+                    .padding(.horizontal, 12).frame(height: 36)
+                }
+                .buttonStyle(.plain).glassEffect(.regular.interactive(), in: .capsule)
+                .help("Revoir les modifications proposées par \(Toast.actorName(p.actor))")
+                .transition(.scale.combined(with: .opacity))
+            }
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                 TextField("Rechercher", text: $query).textFieldStyle(.plain).focused($searchFocused)
