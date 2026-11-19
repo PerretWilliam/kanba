@@ -116,7 +116,7 @@ extension Proposal {
         for ob in base where !newIDs.contains(ob.id) {
             out.append(Change(kind: .remove, title: "Tableau « \(ob.name) »",
                               lines: [.init(label: "Contenu", old: "\(ob.columns.count) colonnes, \(ob.cards.count) cartes", new: nil)]) { b in
-                if b.count > 1 { b.removeAll { $0.id == ob.id } }
+                b.removeAll { $0.id == ob.id }
             })
         }
         return out

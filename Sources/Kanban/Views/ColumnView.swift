@@ -8,6 +8,7 @@ struct ColumnView: View {
     let onRename: () -> Void
     let onColor: (ColumnColor) -> Void
     let onDeleteColumn: () -> Void
+    let onClear: () -> Void
     let cards: [Card]
     let draggingID: UUID?
     let highlighted: Bool
@@ -38,6 +39,7 @@ struct ColumnView: View {
                     ForEach(ColumnColor.allCases) { c in Button(c.label) { onColor(c) } }
                 }
                 Divider()
+                if isDone { Button("Vider la colonne", role: .destructive, action: onClear) }
                 Button("Supprimer la colonne", role: .destructive, action: onDeleteColumn).disabled(!canDelete)
             }
             ScrollView {

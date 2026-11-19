@@ -2,7 +2,7 @@
 """MCP server (stdio, stdlib only) for the Kanban app. Writes proposal.json; the app shows a diff the user validates."""
 import json, os, sys, uuid, datetime as dt
 
-PATH = os.path.expanduser("~/Library/Application Support/Kanban/boards.json")
+PATH = os.path.join(os.path.expanduser(os.environ.get("KANBA_DATA", "~/Library/Application Support/Kanban")), "boards.json")
 EPOCH = dt.datetime(2001, 1, 1, tzinfo=dt.timezone.utc)  # Swift Date reference
 COLORS = "gray blue green orange purple pink teal red".split()
 PRIO = {"low": 0, "medium": 1, "high": 2}
@@ -30,6 +30,7 @@ def same(ref, *vals): return any(ref.lower() == v.lower() for v in vals)
 
 def board_of(d, ref=None):
     if ref is None:  # the tab on screen (falls back to the first board if the id is stale)
+        if not d["boards"]: raise ValueError("there are no boards: create one with add_board")
         return next((b for b in d["boards"] if b["id"] == d["selected"]), d["boards"][0])
     for b in d["boards"]:
         if same(ref, b["id"], b["name"]): return b
@@ -134,9 +135,8 @@ def select_board(a):  # UI state, not data: applied immediately
 
 def delete_board(a):
     d = load(); b = board_of(d, a["board"])
-    if len(d["boards"]) == 1: raise ValueError("cannot delete the last board")
     d["boards"].remove(b)
-    if d["selected"] == b["id"]: d["selected"] = d["boards"][0]["id"]
+    if d["selected"] == b["id"] and d["boards"]: d["selected"] = d["boards"][0]["id"]
     save(d); return "ok"
 
 # ---- JSON export / import (same format as the app's share button) ----
@@ -177,7 +177,7 @@ TOOLS = {
                    ["name"], name=STR, columns=ARR, cards={"type": "array", "items": S(**CARD)}),
     "update_board": T(update_board, "Rename a board.", ["board", "name"], board=BOARD, name=STR),
     "select_board": T(select_board, "Switch the app to this tab.", ["board"], board=BOARD),
-    "delete_board": T(delete_board, "Close a board (tab) and delete its cards. Not the last one.", ["board"], board=BOARD),
+    "delete_board": T(delete_board, "Close a board (tab) and delete its cards. Deleting the last one shows the app's welcome page.", ["board"], board=BOARD),
     "export_board": T(export_board, "Export a board to a JSON file (app's share format).", ["path"], board=BOARD, path=STR, overwrite=BOOL),
     "import_board": T(import_board, "Import a board from a JSON file exported by the app or export_board, as a new tab.", ["path"], path=STR),
 }

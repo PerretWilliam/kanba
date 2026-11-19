@@ -18,7 +18,7 @@ Requires macOS 26+ and Swift 6 (the code builds in Swift 5 language mode).
 - Match the existing style (compact, no needless abstractions).
 - The on-disk format is documented in [CLAUDE.md](CLAUDE.md). Don't break existing `boards.json` files.
 - AI-driven changes must keep going through `proposal.json` — never write `boards.json` from the MCP server (except `select_board`).
-- Test your change by running the app. For the MCP server, pipe JSON-RPC lines into `python3 tools/mcp.py` and check the proposal appears in the app. Use a copy of your data (`~/Library/Application Support/Kanban/`) when experimenting.
+- Test your change by running the app. For the MCP server, pipe JSON-RPC lines into `python3 tools/mcp.py` and check the proposal appears in the app. Set `KANBA_DATA=/some/empty/folder` (for both the app and the MCP server) to experiment without touching your real boards.
 
 ## Pull requests
 

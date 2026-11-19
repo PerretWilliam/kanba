@@ -7,4 +7,4 @@ MCP server `kanban` (`tools/mcp.py`, stdlib only, user scope: `claude mcp add --
 Format: `{"selected": "<board uuid>", "boards": [Board]}`
 - Board: `{id: uuid, name, columns: [{id, name, color}], cards: [Card]}`; colors: gray blue green orange purple pink teal red; the last column means "done".
 - Card: `{id: uuid (new uppercase uuid4), title, notes, priority: 0|1|2 (low/medium/high), due?: seconds since 2001-01-01 UTC, status: column id, tags: [string]}`.
-- Invalid JSON or empty `boards` = change ignored.
+- Invalid JSON = change ignored. `boards` may be empty (the app then shows its welcome page).

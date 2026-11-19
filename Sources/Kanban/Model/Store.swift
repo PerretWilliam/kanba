@@ -26,8 +26,9 @@ import SwiftUI
 
     private struct Saved: Codable { var boards: [Board]; var selected: UUID }
     private let dir: URL = {
-        let d = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Kanban")
+        // KANBA_DATA overrides the data folder (experiments, tests) without touching your real boards.
+        let d = ProcessInfo.processInfo.environment["KANBA_DATA"].map { URL(fileURLWithPath: $0) }
+            ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Kanban")
         try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
         return d
     }()
@@ -35,7 +36,7 @@ import SwiftUI
     private var proposalURL: URL { dir.appendingPathComponent("proposal.json") }
 
     init() {
-        if let s = try? JSONDecoder().decode(Saved.self, from: Data(contentsOf: url)), !s.boards.isEmpty {
+        if let s = try? JSONDecoder().decode(Saved.self, from: Data(contentsOf: url)) {   // may hold zero boards: welcome page
             boards = s.boards; selected = s.selected; fileSelected = s.selected
         } else {
             // First launch after the tabs update: adopt the old single-board file.
@@ -43,7 +44,7 @@ import SwiftUI
             boards = [Board(name: "Mon Kanban", cards: old)]
         }
         if let id = UserDefaults.standard.string(forKey: "selectedBoard").flatMap(UUID.init), boards.contains(where: { $0.id == id }) { selected = id }
-        if !boards.contains(where: { $0.id == selected }) { selected = boards[0].id }
+        if let f = boards.first, !boards.contains(where: { $0.id == selected }) { selected = f.id }
         save()  // file's "selected" may be stale (e.g. taken from UserDefaults above)
         watch()
         loadProposal()
@@ -73,12 +74,12 @@ import SwiftUI
 
     private func reload() {
         guard let d = try? Data(contentsOf: url), d != lastData,
-              let s = try? JSONDecoder().decode(Saved.self, from: d), !s.boards.isEmpty else { return }
+              let s = try? JSONDecoder().decode(Saved.self, from: d) else { return }
         lastData = d
         let target = s.selected != fileSelected && s.boards.contains { $0.id == s.selected } ? s.selected : selected
         fileSelected = s.selected
         withAnimation {
-            selected = s.boards.contains { $0.id == target } ? target : s.boards[0].id
+            if let f = s.boards.first { selected = s.boards.contains { $0.id == target } ? target : f.id }
             boards = s.boards
         }
     }
@@ -112,7 +113,7 @@ import SwiftUI
         withAnimation {
             boards = b
             if let id = chosen.compactMap(\.addedBoard).last, b.contains(where: { $0.id == id }) { selected = id }
-            if !boards.contains(where: { $0.id == selected }) { selected = boards[0].id }
+            if let f = boards.first, !boards.contains(where: { $0.id == selected }) { selected = f.id }
         }
         finishProposal()
         notify(chosen.isEmpty ? "Aucune modification appliquée" : "\(plural(chosen.count, "modification")) appliquée\(chosen.count > 1 ? "s" : "")", actor: p.actor)
@@ -127,11 +128,11 @@ import SwiftUI
     // MARK: Current board
 
     private var index: Int { boards.firstIndex { $0.id == selected } ?? 0 }
-    var board: Board { boards[index] }
+    var board: Board { boards.indices.contains(index) ? boards[index] : Board(name: "") }   // placeholder while there are no boards (welcome page)
     var allTags: [String] { Array(Set(board.cards.flatMap(\.tags))).sorted() }
 
     /// Mutates the current board with a single assignment (= a single save).
-    func edit(_ change: (inout Board) -> Void) { var b = boards; change(&b[index]); boards = b }
+    func edit(_ change: (inout Board) -> Void) { guard !boards.isEmpty else { return }; var b = boards; change(&b[index]); boards = b }
 
     func upsert(_ card: Card) {
         let isNew = !board.cards.contains { $0.id == card.id }
@@ -202,7 +203,6 @@ import SwiftUI
         let name = boards[i].name
         defer { notify("Tableau « \(name) » fermé") }
         boards.remove(at: i)
-        if boards.isEmpty { boards = [Board(name: "Sans titre")] }
-        if selected == id { selected = boards[max(i - 1, 0)].id }
+        if selected == id, !boards.isEmpty { selected = boards[max(i - 1, 0)].id }
     }
 }
