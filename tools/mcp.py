@@ -195,7 +195,7 @@ def handle(m):
             proposed = False
             out = TOOLS[p["name"]][0](p.get("arguments") or {})
             text = out if isinstance(out, str) else json.dumps(out, ensure_ascii=False)
-            if proposed: text += "\n[Modification proposée: l'utilisateur doit la valider dans l'app Kanban avant qu'elle soit appliquée.]"
+            if proposed: text += "\n[Modification proposée: l'utilisateur doit la valider dans l'app Kanba avant qu'elle soit appliquée.]"
             return {"content": [{"type": "text", "text": text}]}
         except Exception as e:
             return {"isError": True, "content": [{"type": "text", "text": f"{type(e).__name__}: {e}"}]}

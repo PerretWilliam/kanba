@@ -1,4 +1,4 @@
-# Kanban
+# Kanba
 
 App macOS SwiftUI (`./build.sh`). Données: `~/Library/Application Support/Kanban/boards.json`.
 L'app recharge ce fichier en direct (édition manuelle possible). Les outils MCP n'y écrivent PAS: ils écrivent `proposal.json` (base + état proposé), l'app affiche un diff et l'utilisateur valide (tout ou case par case). Seul `select_board` est immédiat.

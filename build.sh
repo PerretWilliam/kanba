@@ -1,9 +1,9 @@
 #!/bin/sh
-# Builds Kanban.app next to this script. Usage: ./build.sh
+# Builds Kanba.app next to this script. Usage: ./build.sh
 set -e
 cd "$(dirname "$0")"
 swift build -c release
-APP=Kanban.app
+APP=Kanba.app
 rm -rf $APP && mkdir -p $APP/Contents/MacOS
 cp .build/release/Kanban $APP/Contents/MacOS/
 mkdir -p $APP/Contents/Resources && cp -R Fonts $APP/Contents/Resources/Fonts
@@ -15,7 +15,7 @@ cat > $APP/Contents/Info.plist <<PLIST
 <key>CFBundleExecutable</key><string>Kanban</string>
 <key>CFBundleIdentifier</key><string>fr.williamperret.kanban</string>
 <key>CFBundleIconFile</key><string>Icon</string>
-<key>CFBundleName</key><string>Kanban</string>
+<key>CFBundleName</key><string>Kanba</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>1.0</string>
 <key>CFBundleDevelopmentRegion</key><string>fr</string>

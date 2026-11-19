@@ -101,7 +101,7 @@ struct ContentView: View {
     private var header: some View {
         HStack(spacing: 10) {
             LogoMark()
-            Text("Kanban").font(.mono(18, .bold))
+            Text("Kanba").font(.mono(18, .bold))
             Spacer()
             if let p = store.proposal {
                 Button { sheet = .review } label: {
