@@ -69,6 +69,22 @@ struct ContentView: View {
             .onChange(of: store.selected) { filter = nil; filterTag = nil; query = "" }
     }
 
+    /// "N to review" pill: opens the diff of what an AI client proposed.
+    @ViewBuilder private var reviewButton: some View {
+        if let p = store.proposal {
+            Button { sheet = .review } label: {
+                HStack(spacing: 6) {
+                    ActorIcon(actor: p.actor).frame(width: 14, height: 14)
+                    Text("\(store.review.count) à valider").font(.inter(12, .medium))
+                }
+                .padding(.horizontal, 12).frame(height: 36)
+            }
+            .buttonStyle(.plain).glassEffect(.regular.interactive(), in: .capsule)
+            .help("Revoir les modifications proposées par \(Toast.actorName(p.actor))")
+            .transition(.scale.combined(with: .opacity))
+        }
+    }
+
     private var welcome: some View {
         VStack(spacing: 14) {
             Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 128, height: 128)
@@ -83,6 +99,7 @@ struct ContentView: View {
             .controlSize(.large).padding(.top, 8)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(alignment: .topTrailing) { reviewButton.padding(16) }
     }
 
     private var main: some View {
@@ -128,18 +145,7 @@ struct ContentView: View {
             LogoMark()
             Text("Kanba").font(.mono(18, .bold))
             Spacer()
-            if let p = store.proposal {
-                Button { sheet = .review } label: {
-                    HStack(spacing: 6) {
-                        ActorIcon(actor: p.actor).frame(width: 14, height: 14)
-                        Text("\(store.review.count) à valider").font(.inter(12, .medium))
-                    }
-                    .padding(.horizontal, 12).frame(height: 36)
-                }
-                .buttonStyle(.plain).glassEffect(.regular.interactive(), in: .capsule)
-                .help("Revoir les modifications proposées par \(Toast.actorName(p.actor))")
-                .transition(.scale.combined(with: .opacity))
-            }
+            reviewButton
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                 TextField("Rechercher", text: $query).textFieldStyle(.plain).focused($searchFocused)
