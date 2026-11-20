@@ -1,5 +1,39 @@
 import SwiftUI
 
+/// Phases (sub-boards) of the current tab, under the tab strip.
+struct PhaseBar: View {
+    let root: Board, phases: [Board], selected: UUID
+    let onSelect: (UUID) -> Void, onRename: (Board) -> Void, onDelete: (Board) -> Void, onNew: () -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            chip(root, label: "Général")
+            ForEach(phases) { p in
+                chip(p, label: p.name).contextMenu {
+                    Button("Renommer…") { onRename(p) }
+                    Button("Supprimer la phase", role: .destructive) { onDelete(p) }
+                }
+            }
+            Button(action: onNew) { Label("Phase", systemImage: "plus").font(.inter(11)) }
+                .buttonStyle(.borderless).foregroundStyle(.secondary).help("Nouvelle phase")
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12).frame(height: 30)
+        .overlay(alignment: .bottom) { Divider() }
+        .animation(.snappy(duration: 0.2), value: phases.map(\.id))
+    }
+
+    private func chip(_ b: Board, label: String) -> some View {
+        let on = b.id == selected
+        return Button { onSelect(b.id) } label: {
+            Text(label).font(.inter(11, on ? .medium : .regular)).lineLimit(1)
+                .padding(.horizontal, 10).padding(.vertical, 3)
+                .background(on ? AnyShapeStyle(Color.accentColor.opacity(0.18)) : AnyShapeStyle(.clear), in: .capsule)
+                .foregroundStyle(on ? Color.accentColor : .secondary)
+        }.buttonStyle(.plain)
+    }
+}
+
 /// VS Code–style strip of open boards, at the very top of the window.
 struct TabBar: View {
     let boards: [Board]

@@ -63,9 +63,9 @@ struct ContentView: View {
             .confirmationDialog("Supprimer toutes les cartes de « \(board.columns.last?.name ?? "") » ?", isPresented: $confirmClear) {
                 Button("Supprimer", role: .destructive) { store.clearLastColumn() }
             }
-            .confirmationDialog("Supprimer le tableau « \(board.name) » ?", isPresented: $confirmDelete) {
+            .confirmationDialog("Supprimer \(board.parent == nil ? "le tableau" : "la phase") « \(board.name) » ?", isPresented: $confirmDelete) {
                 Button("Supprimer", role: .destructive) { store.close(store.selected) }
-            } message: { Text("Ses colonnes et ses cartes seront supprimées.") }
+            } message: { Text(board.parent == nil && !store.phases.isEmpty ? "Ses phases, colonnes et cartes seront supprimées." : "Ses colonnes et ses cartes seront supprimées.") }
             .onChange(of: store.selected) { filter = nil; filterTag = nil; query = "" }
     }
 
@@ -104,10 +104,17 @@ struct ContentView: View {
 
     private var main: some View {
         VStack(spacing: 0) {
-            TabBar(boards: store.boards, selected: store.selected,
+            TabBar(boards: store.topBoards, selected: store.rootID,
                    onSelect: { store.selected = $0 }, onClose: { store.close($0) },
                    onRename: { b in sheet = .name(title: "Renommer le tableau", text: b.name) { store.rename(b.id, $0) } },
                    onNew: { sheet = .new })
+            if let root = store.boards.first(where: { $0.id == store.rootID }) {
+                PhaseBar(root: root, phases: store.phases, selected: store.selected,
+                         onSelect: { store.selected = $0 },
+                         onRename: { b in sheet = .name(title: "Renommer la phase", text: b.name) { store.rename(b.id, $0) } },
+                         onDelete: { store.close($0.id) },
+                         onNew: { sheet = .name(title: "Nouvelle phase", text: "") { store.addPhase($0) } })
+            }
             header
             HStack(spacing: 14) {
                 ForEach(board.columns) { col in

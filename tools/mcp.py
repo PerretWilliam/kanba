@@ -79,7 +79,7 @@ def get_boards(a):
             and ("priority" not in a or c.get("priority", 1) == PRIO[a["priority"]]) and ("tag" not in a or a["tag"] in c.get("tags", []))
     boards = [board_of(d, a["board"])] if "board" in a else d["boards"]
     return {"selected": board_of(d)["id"], "boards": [{
-        "id": b["id"], "name": b["name"], "columns": [{"id": c["id"], "name": c["name"], "color": c["color"]} for c in b["columns"]],
+        "id": b["id"], "name": b["name"], "parent": b.get("parent"), "columns": [{"id": c["id"], "name": c["name"], "color": c["color"]} for c in b["columns"]],
         "done_column": b["columns"][-1]["name"],
         "cards": [{"id": c["id"], "title": c["title"], "column": next((x["name"] for x in b["columns"] if x["id"] == c["status"]), None),
                    "priority": ["low", "medium", "high"][c.get("priority", 1)], "tags": c.get("tags", []), "notes": c.get("notes", ""),
@@ -119,7 +119,10 @@ def delete_column(a):  # same rule as the app: its cards go to the left neighbou
 # ---- boards (tabs) ----
 def add_board(a):
     d = load()
-    b = {"id": str(uuid.uuid4()).upper(), "name": a["name"], "cards": [], "columns": mkcols(a["columns"]) if a.get("columns") else DEFAULT_COLS}
+    parent = board_of(d, a["parent"]) if a.get("parent") else None   # phase = sub-board of a top-level board
+    if parent and parent.get("parent"): raise ValueError("phases cannot have phases: pass the top-level board")
+    b = {"id": str(uuid.uuid4()).upper(), "name": a["name"], "cards": [], "columns": mkcols(a["columns"]) if a.get("columns") else (list(parent["columns"]) if parent else DEFAULT_COLS)}
+    if parent: b["parent"] = parent["id"]
     b["cards"] = [mkcard(b, c) for c in a.get("cards", [])]
     d["boards"].append(b); d["selected"] = b["id"]; save(d); return {"id": b["id"]}
 
@@ -135,8 +138,8 @@ def select_board(a):  # UI state, not data: applied immediately
 
 def delete_board(a):
     d = load(); b = board_of(d, a["board"])
-    d["boards"].remove(b)
-    if d["selected"] == b["id"] and d["boards"]: d["selected"] = d["boards"][0]["id"]
+    d["boards"] = [x for x in d["boards"] if x is not b and x.get("parent") != b["id"]]   # a board takes its phases with it
+    if d["selected"] not in {x["id"] for x in d["boards"]} and d["boards"]: d["selected"] = d["boards"][0]["id"]
     save(d); return "ok"
 
 # ---- export (json = app's share format, csv, markdown) / import (json) ----
@@ -198,11 +201,11 @@ TOOLS = {
     "add_column": T(add_column, "Add a column at the end.", ["name"], board=BOARD, name=STR, color=COLOR),
     "update_column": T(update_column, "Rename and/or recolor a column.", ["column"], board=BOARD, column=STR, name=STR, color=COLOR),
     "delete_column": T(delete_column, "Delete a column; its cards move to the left neighbour. Not the last column.", ["column"], board=BOARD, column=STR),
-    "add_board": T(add_board, "Create a board (tab) and switch to it. Optional columns (names) and starter cards (same fields as add_card) — use it to recreate any template.",
-                   ["name"], name=STR, columns=ARR, cards={"type": "array", "items": S(**CARD)}),
+    "add_board": T(add_board, "Create a board (tab) and switch to it. With parent (a top-level board's id or name) it becomes a phase (sub-board) of that board, with the parent's columns by default. Optional columns (names) and starter cards (same fields as add_card) — use it to recreate any template.",
+                   ["name"], name=STR, parent=BOARD, columns=ARR, cards={"type": "array", "items": S(**CARD)}),
     "update_board": T(update_board, "Rename a board.", ["board", "name"], board=BOARD, name=STR),
     "select_board": T(select_board, "Switch the app to this tab.", ["board"], board=BOARD),
-    "delete_board": T(delete_board, "Close a board (tab) and delete its cards. Deleting the last one shows the app's welcome page.", ["board"], board=BOARD),
+    "delete_board": T(delete_board, "Close a board (tab) or phase and delete its cards (a board's phases go with it). Deleting the last one shows the app's welcome page.", ["board"], board=BOARD),
     "export_board": T(export_board, "Export a board to a file: json (app's share format, re-importable, default), csv (one row per card, opens in Excel) or markdown.", ["path"], board=BOARD, path=STR, format={"type": "string", "enum": ["json", "csv", "markdown"]}, overwrite=BOOL),
     "import_board": T(import_board, "Import a board from a JSON file exported by the app or export_board, as a new tab.", ["path"], path=STR),
 }

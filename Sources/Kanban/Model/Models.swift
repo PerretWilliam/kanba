@@ -28,6 +28,7 @@ struct Board: Identifiable, Codable {
     var name: String
     var columns = Board.defaultColumns
     var cards: [Card] = []
+    var parent: UUID?   // set = a phase (sub-board) of that board; its own columns and cards
 
     // Fixed ids so cards saved before columns became dynamic ("todo"/"doing"/"done") still match.
     static let defaultColumns = [Column(id: "todo", name: "À faire", color: .gray),

@@ -129,6 +129,11 @@ import SwiftUI
 
     private var index: Int { boards.firstIndex { $0.id == selected } ?? 0 }
     var board: Board { boards.indices.contains(index) ? boards[index] : Board(name: "") }   // placeholder while there are no boards (welcome page)
+    /// Boards shown as tabs: everything that is not a phase (an orphaned phase counts as a board).
+    var topBoards: [Board] { boards.filter { b in b.parent.map { p in !boards.contains { $0.id == p } } ?? true } }
+    /// The tab the current board belongs to (itself, or its parent when it is a phase).
+    var rootID: UUID { board.parent.flatMap { p in boards.first { $0.id == p }?.id } ?? board.id }
+    var phases: [Board] { boards.filter { $0.parent == rootID } }
     var allTags: [String] { Array(Set(board.cards.flatMap(\.tags))).sorted() }
 
     /// Mutates the current board with a single assignment (= a single save).
@@ -193,6 +198,12 @@ import SwiftUI
     // MARK: Tabs
 
     func add(_ board: Board) { boards.append(board); selected = board.id; notify("Tableau « \(board.name) » créé") }
+    /// New phase of the current tab, starting with the same columns.
+    func addPhase(_ name: String) {
+        guard let root = boards.first(where: { $0.id == rootID }) else { return }
+        var b = Board(name: name, columns: root.columns); b.parent = root.id
+        boards.append(b); selected = b.id; notify("Phase « \(name) » créée")
+    }
     func rename(_ id: UUID, _ name: String) {
         if let i = boards.firstIndex(where: { $0.id == id }) { boards[i].name = name }
         notify("Tableau renommé « \(name) »")
@@ -200,9 +211,13 @@ import SwiftUI
 
     func close(_ id: UUID) {
         guard let i = boards.firstIndex(where: { $0.id == id }) else { return }
-        let name = boards[i].name
+        let name = boards[i].name, parent = boards[i].parent
+        let tops = topBoards, topIndex = tops.firstIndex { $0.id == id }
         defer { notify("Tableau « \(name) » fermé") }
-        boards.remove(at: i)
-        if selected == id, !boards.isEmpty { selected = boards[max(i - 1, 0)].id }
+        boards.removeAll { $0.id == id || $0.parent == id }   // a tab takes its phases with it
+        if !boards.contains(where: { $0.id == selected }), !boards.isEmpty {
+            let t = topBoards
+            selected = parent.flatMap { p in boards.first { $0.id == p }?.id } ?? t[min(max((topIndex ?? 0) - 1, 0), t.count - 1)].id
+        }
     }
 }
