@@ -10,6 +10,7 @@
 
 - **Native SwiftUI** app for macOS 26+: tabs, drag & drop, search, filters, tags, priorities and due dates.
 - **Multiple boards** with custom columns and colors, plus ready-made **templates**. Delete them all and you get a welcome page.
+- **Manual card order**: drag cards to rank them within a column (top = do first). AI clients read and set the order too (`position`, `reorder_cards`).
 - **Phases**: split a board into sub-boards (e.g. the phases of a project), each with its own columns and cards.
 - **Import** a board from JSON; **export** it as JSON, CSV (opens in Excel) or Markdown.
 - **Plain JSON storage** in `~/Library/Application Support/Kanban/boards.json`; the app reloads it live, so manual edits and scripts just work.

@@ -65,6 +65,12 @@ def apply(c, a, b):
         else: c["due"] = v
     if "column" in a: c["status"] = col_of(b, a["column"])["id"]
 
+def place(b, c, pos):  # card order = array order: put c at 1-based position pos among its column's cards
+    b["cards"] = [x for x in b["cards"] if x is not c]
+    col = [x for x in b["cards"] if x["status"] == c["status"]]
+    i = b["cards"].index(col[max(pos, 1) - 1]) if col and pos <= len(col) else (b["cards"].index(col[-1]) + 1 if col else len(b["cards"]))
+    b["cards"].insert(i, c)
+
 def mkcard(b, a):
     c = {"id": str(uuid.uuid4()).upper(), "title": "", "notes": "", "priority": 1, "tags": [], "status": b["columns"][0]["id"]}
     apply(c, a, b); return c
@@ -81,16 +87,30 @@ def get_boards(a):
     return {"selected": board_of(d)["id"], "boards": [{
         "id": b["id"], "name": b["name"], "parent": b.get("parent"), "columns": [{"id": c["id"], "name": c["name"], "color": c["color"]} for c in b["columns"]],
         "done_column": b["columns"][-1]["name"],
-        "cards": [{"id": c["id"], "title": c["title"], "column": next((x["name"] for x in b["columns"] if x["id"] == c["status"]), None),
+        "cards": [{"position": 1 + sum(1 for y in b["cards"][:b["cards"].index(c)] if y["status"] == c["status"]),
+                   "id": c["id"], "title": c["title"], "column": next((x["name"] for x in b["columns"] if x["id"] == c["status"]), None),
                    "priority": ["low", "medium", "high"][c.get("priority", 1)], "tags": c.get("tags", []), "notes": c.get("notes", ""),
                    "due": to_iso(c["due"]) if "due" in c else None} for c in b["cards"] if keep(c)]} for b in boards]}
 
 # ---- cards ----
 def add_card(a):
-    d = load(); b = board_of(d, a.get("board")); c = mkcard(b, a); b["cards"].append(c); save(d); return {"id": c["id"]}
+    d = load(); b = board_of(d, a.get("board")); c = mkcard(b, a); b["cards"].append(c)
+    if "position" in a: place(b, c, a["position"])
+    save(d); return {"id": c["id"]}
 
 def update_card(a):
-    d = load(); b, c = find_card(d, a["card_id"]); apply(c, a, b); save(d); return "ok"
+    d = load(); b, c = find_card(d, a["card_id"]); apply(c, a, b)
+    if "position" in a: place(b, c, a["position"])
+    save(d); return "ok"
+
+def reorder_cards(a):  # card_ids first, in that order, at the top of the column; unlisted cards keep their order after them
+    d = load(); b = board_of(d, a.get("board")); col = col_of(b, a["column"])["id"]
+    ids = [find_card(d, i)[1] for i in a["card_ids"]]
+    if any(c["status"] != col for c in ids) or len({c["id"] for c in ids}) != len(ids): raise ValueError("card_ids must be distinct cards of that column")
+    slots = [i for i, c in enumerate(b["cards"]) if c["status"] == col]
+    seq = ids + [b["cards"][i] for i in slots if b["cards"][i] not in ids]
+    for i, c in zip(slots, seq): b["cards"][i] = c
+    save(d); return "ok"
 
 def delete_card(a):
     d = load(); b, c = find_card(d, a["card_id"]); b["cards"].remove(c); save(d); return "ok"
@@ -188,13 +208,14 @@ S = lambda **p: {"type": "object", "properties": p}
 STR, ARR, BOOL = {"type": "string"}, {"type": "array", "items": {"type": "string"}}, {"type": "boolean"}
 BOARD = {"type": "string", "description": "board name or id (default: the tab on screen)"}
 COLOR = {"enum": COLORS}
-CARD = dict(title=STR, notes=STR, priority={"enum": list(PRIO)}, due={"type": "string", "description": "ISO date, '' to clear"}, tags=ARR,
+CARD = dict(position={"type": "integer", "description": "1-based rank within its column; 1 = do first. Default: last."}, title=STR, notes=STR, priority={"enum": list(PRIO)}, due={"type": "string", "description": "ISO date, '' to clear"}, tags=ARR,
             column={"type": "string", "description": "column name or id"})
 def T(fn, desc, req=(), **props): return (fn, desc, {**S(**props), "required": list(req)})
 TOOLS = {
     "get_boards": T(get_boards, "List boards (tabs) with columns and cards. The last column of a board is its 'done' column. Optional search/filter like the app's.",
                     board=BOARD, query=STR, priority={"enum": list(PRIO)}, tag=STR),
     "add_card": T(add_card, "Add a card (default: first column of the tab on screen).", ["title"], board=BOARD, **CARD),
+    "reorder_cards": T(reorder_cards, "Set the priority order of cards in a column: card_ids go first, in that order (position 1 = do first); other cards follow. Cards are listed by get_boards in this order.", ["column", "card_ids"], board=BOARD, column=STR, card_ids=ARR),
     "update_card": T(update_card, "Edit a card; 'column' moves it.", ["card_id"], card_id=STR, **CARD),
     "delete_card": T(delete_card, "Delete a card.", ["card_id"], card_id=STR),
     "clear_last_column": T(clear_last_column, "Delete every card of the board's last ('done') column — the app's trash button.", board=BOARD),

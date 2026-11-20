@@ -15,6 +15,7 @@ struct ColumnView: View {
     let onEdit: (Card) -> Void
     let onAdd: () -> Void
     let onFrame: (CGRect) -> Void
+    let onCardFrame: (UUID, CGRect) -> Void
     let onDrag: (Card, CGPoint) -> Void
     let onDrop: (Card, CGPoint) -> Void
     @Environment(\.colorScheme) private var scheme
@@ -49,6 +50,7 @@ struct ColumnView: View {
                             .transition(.scale(scale: 0.96).combined(with: .opacity))
                             .opacity(draggingID == card.id ? 0.25 : 1)
                             .pointerStyle(draggingID != nil ? .grabActive : .grabIdle)
+                            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("board")) } action: { onCardFrame(card.id, $0) }
                             .onTapGesture { onEdit(card) }
                             .gesture(DragGesture(minimumDistance: 5, coordinateSpace: .named("board"))
                                 .onChanged { onDrag(card, $0.location) }

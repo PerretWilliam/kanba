@@ -107,6 +107,24 @@ extension Proposal {
                     }))
                 }
             }
+            // Order within each column (card order = array order). Compared as: cards already there first, the rest after.
+            for col in nb.columns where ob.columns.contains(where: { $0.id == col.id }) {
+                let oldIDs = ob.cards.filter { $0.status == col.id }.map(\.id), newIDs = nb.cards.filter { $0.status == col.id }.map(\.id)
+                let expected = oldIDs.filter(newIDs.contains) + newIDs.filter { !oldIDs.contains($0) }
+                guard expected != newIDs else { continue }
+                let list: ([UUID], Board) -> String = { ids, b in
+                    ids.enumerated().map { n, id in "\(n + 1). \(b.cards.first { $0.id == id }?.title ?? "?")" }.joined(separator: "\n")
+                }
+                out.append(Change(kind: .edit, title: "Ordre dans « \(col.name) »", scope: scope,
+                                  lines: [.init(label: "Ordre", old: list(oldIDs, ob), new: list(newIDs, nb))], apply: onBoard(nb.id) { b in
+                    // Reuse the column's slots in the array so other columns are untouched; unlisted cards keep their relative order, after.
+                    let slots = b.cards.indices.filter { b.cards[$0].status == col.id }
+                    let live = slots.map { b.cards[$0] }
+                    let first = newIDs.compactMap { id in live.first { $0.id == id } }
+                    let seq = first + live.filter { c in !first.contains { $0.id == c.id } }
+                    for (s, c) in zip(slots, seq) { b.cards[s] = c }
+                }))
+            }
             for o in ob.cards where !nb.cards.contains(where: { $0.id == o.id }) {
                 out.append(Change(kind: .remove, title: "Carte « \(o.title) »", scope: scope,
                                   lines: [.init(label: "Colonne", old: colName(ob, o.status), new: nil)],

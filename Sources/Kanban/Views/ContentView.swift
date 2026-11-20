@@ -12,6 +12,7 @@ struct ContentView: View {
     @State private var dragging: Card?
     @State private var dragPoint = CGPoint.zero
     @State private var frames: [String: CGRect] = [:]
+    @State private var cardFrames: [UUID: CGRect] = [:]
     @State private var confirmClear = false
     @State private var confirmDelete = false
 
@@ -128,9 +129,16 @@ struct ContentView: View {
                                onEdit: { sheet = .edit($0) },
                                onAdd: { sheet = .edit(Card(status: col.id)) },
                                onFrame: { frames[col.id] = $0 },
+                               onCardFrame: { cardFrames[$0] = $1 },
                                onDrag: { card, point in dragging = card; dragPoint = point },
                                onDrop: { card, point in
-                                   if let to = column(at: point), to != card.status { store.move([card.id.uuidString], to: to) }
+                                   if let to = column(at: point) {
+                                       // Insert before the first other card whose middle is below the drop point.
+                                       let rest = cards(in: to).filter { $0.id != card.id }
+                                       let i = rest.firstIndex { (cardFrames[$0.id]?.midY ?? .infinity) > point.y }
+                                       let same = to == card.status && cards(in: to).firstIndex { $0.id == card.id } == (i ?? rest.count)
+                                       if !same { store.drop(card, to: to, before: i.map { rest[$0].id }) }
+                                   }
                                    dragging = nil
                                })
                         .transition(.scale(scale: 0.95).combined(with: .opacity))
@@ -192,13 +200,9 @@ struct ContentView: View {
     }
 
     private func cards(in column: String) -> [Card] {
-        board.cards
+        board.cards   // manual order = array order (drag to reorder; AI clients set it too)
             .filter { $0.status == column && (filter == nil || $0.priority == filter)
                 && (filterTag == nil || $0.tags.contains(filterTag!))
                 && (query.isEmpty || ([$0.title, $0.notes] + $0.tags).contains { $0.localizedStandardContains(query) }) }
-            .sorted { a, b in
-                a.priority != b.priority ? a.priority.rawValue > b.priority.rawValue
-                    : (a.due ?? .distantFuture) < (b.due ?? .distantFuture)
-            }
     }
 }

@@ -161,6 +161,20 @@ import SwiftUI
         }
     }
 
+    /// Drops a card into a column, just before `before` (nil = at the end). Card order = array order.
+    func drop(_ card: Card, to column: String, before: UUID?) {
+        let moved = card.status != column
+        let name = board.columns.first { $0.id == column }?.name ?? ""
+        notify(moved ? "« \(card.title) » déplacée vers « \(name) »" : "« \(card.title) » réordonnée")
+        withAnimation(.snappy(duration: 0.25)) {
+            edit { b in
+                guard let i = b.cards.firstIndex(where: { $0.id == card.id }) else { return }
+                var c = b.cards.remove(at: i); c.status = column
+                if let before, let j = b.cards.firstIndex(where: { $0.id == before }) { b.cards.insert(c, at: j) } else { b.cards.append(c) }
+            }
+        }
+    }
+
     func clearLastColumn() {
         let n = board.cards.filter { $0.status == board.columns.last?.id }.count
         edit { b in if let last = b.columns.last?.id { b.cards.removeAll { $0.status == last } } }
