@@ -56,7 +56,7 @@ private struct TabItem: View {
         .onHover { hover = $0 }
         .contextMenu {
             Button("Renommer…", action: onRename)
-            Button("Exporter en JSON…") { BoardIO.export(board) }
+            ForEach(BoardIO.Format.allCases, id: \.self) { f in Button("Exporter en \(f.label)…") { BoardIO.export(board, as: f) } }
             Divider()
             Button("Fermer", action: onClose)
         }

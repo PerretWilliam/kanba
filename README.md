@@ -10,7 +10,7 @@
 
 - **Native SwiftUI** app for macOS 26+: tabs, drag & drop, search, filters, tags, priorities and due dates.
 - **Multiple boards** with custom columns and colors, plus ready-made **templates**. Delete them all and you get a welcome page.
-- **Import / export** any board as a JSON file.
+- **Import** a board from JSON; **export** it as JSON, CSV (opens in Excel) or Markdown.
 - **Plain JSON storage** in `~/Library/Application Support/Kanban/boards.json`; the app reloads it live, so manual edits and scripts just work.
 - **AI-ready via MCP**: a tiny stdlib-only Python server lets Claude (or any MCP client) read and edit your boards.
 - **Review before apply**: AI edits are never written directly. They arrive as a git-diff-like proposal that you accept all at once or change by change.

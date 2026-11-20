@@ -139,12 +139,37 @@ def delete_board(a):
     if d["selected"] == b["id"] and d["boards"]: d["selected"] = d["boards"][0]["id"]
     save(d); return "ok"
 
-# ---- JSON export / import (same format as the app's share button) ----
+# ---- export (json = app's share format, csv, markdown) / import (json) ----
+def _csv(b):
+    import csv, io
+    names = {c["id"]: c["name"] for c in b["columns"]}; buf = io.StringIO(); w = csv.writer(buf, lineterminator="\r\n")
+    w.writerow(["Column", "Title", "Notes", "Priority", "Due", "Tags"])
+    for col in b["columns"]:
+        for c in b["cards"]:
+            if c["status"] == col["id"]:
+                w.writerow([names[col["id"]], c["title"], c.get("notes", ""), ["Low", "Medium", "High"][c.get("priority", 1)], to_iso(c["due"])[:10] if "due" in c else "", ", ".join(c.get("tags", []))])
+    return "\ufeff" + buf.getvalue()
+
+def _md(b):
+    out = [f"# {b['name']}"]
+    for col in b["columns"]:
+        out += ["", f"## {col['name']}", ""]
+        for c in b["cards"]:
+            if c["status"] != col["id"]: continue
+            meta = [f"Priority: {['Low', 'Medium', 'High'][c.get('priority', 1)]}"] + ([f"due {to_iso(c['due'])[:10]}"] if "due" in c else []) + ([" ".join("#" + t for t in c["tags"])] if c.get("tags") else [])
+            out.append(f"- [{'x' if col is b['columns'][-1] else ' '}] **{c['title']}** — {' · '.join(meta)}")
+            out += [f"  {l}" for l in c.get("notes", "").splitlines() if l.strip()]
+    return "\n".join(out) + "\n"
+
 def export_board(a):
-    d = load(); b = board_of(d, a.get("board")); p = os.path.expanduser(a["path"])
+    d = load(); b = board_of(d, a.get("board")); p = os.path.expanduser(a["path"]); fmt = a.get("format", "json")
     if os.path.exists(p) and not a.get("overwrite"): raise ValueError(f"{p} exists (pass overwrite=true)")
-    cards = [{**c, **({"due": to_iso(c["due"])} if "due" in c else {})} for c in b["cards"]]
-    json.dump({"format": "kanban", "version": 1, "name": b["name"], "columns": b["columns"], "cards": cards}, open(p, "w"), indent=2, sort_keys=True, ensure_ascii=False)
+    if fmt == "csv": open(p, "w", encoding="utf-8", newline="").write(_csv(b))
+    elif fmt == "markdown": open(p, "w", encoding="utf-8").write(_md(b))
+    elif fmt == "json":
+        cards = [{**c, **({"due": to_iso(c["due"])} if "due" in c else {})} for c in b["cards"]]
+        json.dump({"format": "kanban", "version": 1, "name": b["name"], "columns": b["columns"], "cards": cards}, open(p, "w"), indent=2, sort_keys=True, ensure_ascii=False)
+    else: raise ValueError("format must be json, csv or markdown")
     return p
 
 def import_board(a):
@@ -178,7 +203,7 @@ TOOLS = {
     "update_board": T(update_board, "Rename a board.", ["board", "name"], board=BOARD, name=STR),
     "select_board": T(select_board, "Switch the app to this tab.", ["board"], board=BOARD),
     "delete_board": T(delete_board, "Close a board (tab) and delete its cards. Deleting the last one shows the app's welcome page.", ["board"], board=BOARD),
-    "export_board": T(export_board, "Export a board to a JSON file (app's share format).", ["path"], board=BOARD, path=STR, overwrite=BOOL),
+    "export_board": T(export_board, "Export a board to a file: json (app's share format, re-importable, default), csv (one row per card, opens in Excel) or markdown.", ["path"], board=BOARD, path=STR, format={"type": "string", "enum": ["json", "csv", "markdown"]}, overwrite=BOOL),
     "import_board": T(import_board, "Import a board from a JSON file exported by the app or export_board, as a new tab.", ["path"], path=STR),
 }
 

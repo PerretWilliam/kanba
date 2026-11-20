@@ -162,7 +162,12 @@ struct ContentView: View {
                     IconButton("line.3.horizontal.decrease", "Filtrer",
                                filter == nil && filterTag == nil ? .primary : .accentColor) { showFilter = true }
                         .popover(isPresented: $showFilter, arrowEdge: .bottom) { FilterPanel(filter: $filter, tag: $filterTag, tags: store.allTags) }
-                    IconButton("square.and.arrow.up", "Exporter en JSON") { BoardIO.export(board) }
+                    Menu {
+                        ForEach(BoardIO.Format.allCases, id: \.self) { f in Button("Exporter en \(f.label)…") { BoardIO.export(board, as: f) } }
+                    } label: {
+                        Image(systemName: "square.and.arrow.up").font(.system(size: 15, weight: .medium)).frame(width: 20, height: 20)
+                    }
+                    .menuIndicator(.hidden).help("Exporter le tableau")
                     IconButton("trash", "Supprimer le tableau", .red) { confirmDelete = true }
                     IconButton("plus", "Nouvelle carte", .accentColor) { sheet = .edit(Card(status: board.columns[0].id)) }
                         .keyboardShortcut("n")
