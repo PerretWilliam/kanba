@@ -34,6 +34,12 @@ extension Proposal {
             { b in if let i = b.firstIndex(where: { $0.id == id }) { f(&b[i]) } }
         }
 
+        // A card that left one board and appears in another is one "move", not a removal plus an addition.
+        let oldHome = Dictionary(base.flatMap { b in b.cards.map { ($0.id, b.id) } }, uniquingKeysWith: { a, _ in a })
+        let newHome = Dictionary(new.flatMap { b in b.cards.map { ($0.id, b.id) } }, uniquingKeysWith: { a, _ in a })
+        let moved = Set(newHome.keys.filter { id in oldHome[id] != nil && oldHome[id] != newHome[id]
+            && old[oldHome[id]!] != nil && newIDs.contains(newHome[id]!) && old[newHome[id]!] != nil })
+
         for nb in new {
             guard let ob = old[nb.id] else {
                 out.append(Change(kind: .add, title: "Tableau « \(nb.name) »",
@@ -76,6 +82,19 @@ extension Proposal {
             // Cards
             let colName: (Board, String) -> String = { b, id in b.columns.first { $0.id == id }?.name ?? "?" }
             for c in nb.cards {
+                if moved.contains(c.id), let from = old[oldHome[c.id]!], let o = from.cards.first(where: { $0.id == c.id }) {
+                    let dest = nb.id
+                    out.append(Change(kind: .edit, title: "Carte « \(o.title) »", scope: from.name, lines: [
+                        .init(label: "Tableau", old: from.name, new: nb.name),
+                        .init(label: "Colonne", old: colName(from, o.status), new: colName(nb, c.status))], apply: { b in
+                        guard let s = b.firstIndex(where: { $0.id == from.id }), let t = b.firstIndex(where: { $0.id == dest }),
+                              let k = b[s].cards.firstIndex(where: { $0.id == c.id }) else { return }
+                        var card = c
+                        if !b[t].columns.contains(where: { $0.id == c.status }) { card.status = b[t].columns[0].id }
+                        b[s].cards.remove(at: k); b[t].cards.append(card)
+                    }))
+                    continue
+                }
                 if let o = ob.cards.first(where: { $0.id == c.id }) {
                     guard o != c else { continue }
                     var l: [Change.Line] = []
@@ -125,7 +144,7 @@ extension Proposal {
                     for (s, c) in zip(slots, seq) { b.cards[s] = c }
                 }))
             }
-            for o in ob.cards where !nb.cards.contains(where: { $0.id == o.id }) {
+            for o in ob.cards where !nb.cards.contains(where: { $0.id == o.id }) && !moved.contains(o.id) {
                 out.append(Change(kind: .remove, title: "Carte « \(o.title) »", scope: scope,
                                   lines: [.init(label: "Colonne", old: colName(ob, o.status), new: nil)],
                                   apply: onBoard(nb.id) { b in b.cards.removeAll { $0.id == o.id } }))

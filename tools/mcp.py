@@ -99,7 +99,14 @@ def add_card(a):
     save(d); return {"id": c["id"]}
 
 def update_card(a):
-    d = load(); b, c = find_card(d, a["card_id"]); apply(c, a, b)
+    d = load(); b, c = find_card(d, a["card_id"])
+    if "to_board" in a:  # move to another board: same-named column if any, else the first; 'column' overrides
+        t = board_of(d, a["to_board"])
+        if t is not b:
+            old = next(x["name"] for x in b["columns"] if x["id"] == c["status"])
+            b["cards"].remove(c); t["cards"].append(c); b = t
+            c["status"] = next((x["id"] for x in t["columns"] if x["name"].lower() == old.lower()), t["columns"][0]["id"])
+    apply(c, a, b)
     if "position" in a: place(b, c, a["position"])
     save(d); return "ok"
 
@@ -216,7 +223,7 @@ TOOLS = {
                     board=BOARD, query=STR, priority={"enum": list(PRIO)}, tag=STR),
     "add_card": T(add_card, "Add a card (default: first column of the tab on screen).", ["title"], board=BOARD, **CARD),
     "reorder_cards": T(reorder_cards, "Set the priority order of cards in a column: card_ids go first, in that order (position 1 = do first); other cards follow. Cards are listed by get_boards in this order.", ["column", "card_ids"], board=BOARD, column=STR, card_ids=ARR),
-    "update_card": T(update_card, "Edit a card; 'column' moves it.", ["card_id"], card_id=STR, **CARD),
+    "update_card": T(update_card, "Edit a card; 'column' moves it within its board, 'to_board' moves it to another board (or phase).", ["card_id"], card_id=STR, to_board=BOARD, **CARD),
     "delete_card": T(delete_card, "Delete a card.", ["card_id"], card_id=STR),
     "clear_last_column": T(clear_last_column, "Delete every card of the board's last ('done') column — the app's trash button.", board=BOARD),
     "add_column": T(add_column, "Add a column at the end.", ["name"], board=BOARD, name=STR, color=COLOR),

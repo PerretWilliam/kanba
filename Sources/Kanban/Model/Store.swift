@@ -175,6 +175,18 @@ import SwiftUI
         }
     }
 
+    /// Moves a card to another board (same-named column if there is one, else the first), at the end of that column.
+    func move(_ card: Card, toBoard id: UUID) {
+        guard id != selected, let t = boards.firstIndex(where: { $0.id == id }), let col = boards[t].columns.first else { return }
+        var c = card
+        c.status = (boards[t].columns.first { $0.name.lowercased() == board.columns.first { $0.id == card.status }?.name.lowercased() } ?? col).id
+        notify("« \(card.title) » déplacée vers « \(boards[t].name) »")
+        var b = boards
+        b[index].cards.removeAll { $0.id == card.id }
+        b[t].cards.append(c)
+        withAnimation(.snappy(duration: 0.25)) { boards = b }
+    }
+
     func clearLastColumn() {
         let n = board.cards.filter { $0.status == board.columns.last?.id }.count
         edit { b in if let last = b.columns.last?.id { b.cards.removeAll { $0.status == last } } }

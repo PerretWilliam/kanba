@@ -126,6 +126,9 @@ struct ContentView: View {
                                onClear: { confirmClear = true },
                                cards: cards(in: col.id),
                                draggingID: dragging?.id, highlighted: dragging != nil && column(at: dragPoint) == col.id,
+                               otherBoards: store.boards.filter { $0.id != store.selected }.map { b in
+                                   (b.id, store.boards.first { $0.id == b.parent }.map { "\($0.name) › \(b.name)" } ?? b.name) },
+                               onMoveToBoard: { store.move($0, toBoard: $1) },
                                onEdit: { sheet = .edit($0) },
                                onAdd: { sheet = .edit(Card(status: col.id)) },
                                onFrame: { frames[col.id] = $0 },

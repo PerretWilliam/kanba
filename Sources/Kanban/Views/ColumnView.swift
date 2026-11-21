@@ -12,6 +12,8 @@ struct ColumnView: View {
     let cards: [Card]
     let draggingID: UUID?
     let highlighted: Bool
+    let otherBoards: [(id: UUID, name: String)]
+    let onMoveToBoard: (Card, UUID) -> Void
     let onEdit: (Card) -> Void
     let onAdd: () -> Void
     let onFrame: (CGRect) -> Void
@@ -52,6 +54,14 @@ struct ColumnView: View {
                             .pointerStyle(draggingID != nil ? .grabActive : .grabIdle)
                             .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("board")) } action: { onCardFrame(card.id, $0) }
                             .onTapGesture { onEdit(card) }
+                            .contextMenu {
+                                Button("Modifier…") { onEdit(card) }
+                                if !otherBoards.isEmpty {
+                                    Menu("Déplacer vers le tableau") {
+                                        ForEach(otherBoards, id: \.id) { t in Button(t.name) { onMoveToBoard(card, t.id) } }
+                                    }
+                                }
+                            }
                             .gesture(DragGesture(minimumDistance: 5, coordinateSpace: .named("board"))
                                 .onChanged { onDrag(card, $0.location) }
                                 .onEnded { onDrop(card, $0.location) })
