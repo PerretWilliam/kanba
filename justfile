@@ -9,7 +9,7 @@ build:
 # Run all tests (Swift + MCP server)
 test:
     swift test
-    python3 -m unittest discover -s tests
+    python3 -m unittest discover -s Tests
 
 # Tests + the 100% line-coverage gate on the logic layer (Swift) and the MCP server (Python)
 cover:

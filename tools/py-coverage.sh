@@ -3,5 +3,5 @@
 set -e
 cd "$(dirname "$0")/.."
 PY=python3; [ -x .venv/bin/python ] && PY=.venv/bin/python
-$PY -m coverage run -m unittest discover -s tests
+$PY -m coverage run -m unittest discover -s Tests
 $PY -m coverage report
