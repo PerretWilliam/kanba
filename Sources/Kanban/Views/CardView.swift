@@ -12,7 +12,7 @@ struct CardView: View {
                     .strikethrough(isDone)
             }
             if !card.notes.isEmpty {
-                Text(card.notes).font(.inter(12)).foregroundStyle(.secondary).lineLimit(2)
+                Text(inlineMarkdown(card.notes)).font(.inter(12)).foregroundStyle(.secondary).lineLimit(2)
             }
             HStack(spacing: 8) {
                 Text(card.priority.label).font(.inter(11, .semibold)).foregroundStyle(card.priority.color)
@@ -22,6 +22,14 @@ struct CardView: View {
                     let late = !isDone && due < Calendar.current.startOfDay(for: .now)
                     Label(due.formatted(.dateTime.day().month(.abbreviated)), systemImage: "calendar")
                         .font(.inter(11)).foregroundStyle(late ? .red : .secondary)
+                }
+                Spacer(minLength: 0)
+                HStack(spacing: -3) {
+                    ForEach(card.agents.prefix(4)) { a in
+                        AgentIcon(name: a.name).padding(3).frame(width: 18, height: 18)
+                            .background(.background, in: Circle()).overlay(Circle().stroke(.quaternary))
+                            .help(a.summary)
+                    }
                 }
             }
             if !card.tags.isEmpty {

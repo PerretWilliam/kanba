@@ -8,7 +8,7 @@ import SwiftUI
                 .frame(minWidth: 760, minHeight: 440)
                 .toolbar(removing: .title)
         }
-        .windowToolbarStyle(.unifiedCompact)
+        .windowToolbarStyle(.unified)
         .defaultSize(width: 1100, height: 700)
     }
 }

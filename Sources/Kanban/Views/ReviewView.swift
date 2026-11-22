@@ -58,6 +58,7 @@ struct ReviewView: View {
         .padding(10)
         .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: 12))
         .opacity(on.wrappedValue ? 1 : 0.45)
+        .contentShape(.rect).onTapGesture { on.wrappedValue.toggle() }
     }
 
     private func diffLine(_ sign: String, _ label: String, _ text: String, _ color: Color) -> some View {

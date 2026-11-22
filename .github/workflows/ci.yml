@@ -1,0 +1,22 @@
+name: CI
+on:
+  push: { branches: [master] }
+  pull_request:
+jobs:
+  swift:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tests + 100% line coverage (logic layer)
+        run: tools/swift-coverage.sh
+      - name: Build the app
+        run: ./build.sh
+  mcp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install coverage
+      - name: Tests + 100% line coverage (tools/mcp.py)
+        run: tools/py-coverage.sh

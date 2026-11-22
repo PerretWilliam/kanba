@@ -12,8 +12,9 @@ struct ColumnView: View {
     let cards: [Card]
     let draggingID: UUID?
     let highlighted: Bool
-    let otherBoards: [(id: UUID, name: String)]
+    let moveTargets: [MoveTarget]
     let onMoveToBoard: (Card, UUID) -> Void
+    let onOpen: (Card) -> Void
     let onEdit: (Card) -> Void
     let onAdd: () -> Void
     let onFrame: (CGRect) -> Void
@@ -53,12 +54,20 @@ struct ColumnView: View {
                             .opacity(draggingID == card.id ? 0.25 : 1)
                             .pointerStyle(draggingID != nil ? .grabActive : .grabIdle)
                             .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("board")) } action: { onCardFrame(card.id, $0) }
-                            .onTapGesture { onEdit(card) }
+                            .onTapGesture { onOpen(card) }
                             .contextMenu {
                                 Button("Modifier…") { onEdit(card) }
-                                if !otherBoards.isEmpty {
-                                    Menu("Déplacer vers le tableau") {
-                                        ForEach(otherBoards, id: \.id) { t in Button(t.name) { onMoveToBoard(card, t.id) } }
+                                if !moveTargets.isEmpty {
+                                    Menu("Déplacer vers…") {
+                                        ForEach(moveTargets) { t in
+                                            if t.phases.isEmpty { Button(t.name) { onMoveToBoard(card, t.id) } }
+                                            else {
+                                                Menu(t.name) {
+                                                    if t.general { Button("Général") { onMoveToBoard(card, t.id) } }
+                                                    ForEach(t.phases) { p in Button(p.name) { onMoveToBoard(card, p.id) } }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }

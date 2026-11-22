@@ -1,14 +1,5 @@
 import SwiftUI
 
-/// A short message. `actor` is nil for the user, otherwise the name of the AI client that acted (e.g. "claude-code").
-struct Toast: Identifiable, Equatable {
-    let id = UUID()
-    var text: String
-    var actor: String?
-
-    static func actorName(_ a: String) -> String { a.lowercased().contains("claude") ? "Claude" : a }
-}
-
 struct ToastView: View {
     let toast: Toast
 
@@ -24,15 +15,11 @@ struct ToastView: View {
     }
 }
 
-/// Who did it: a check for the user, Claude's mark for Claude, a generic spark for any other AI client.
+/// Who did it: a check for the user, the AI client's icon (see Agents) for an AI.
 struct ActorIcon: View {
     let actor: String?
     var body: some View {
-        if let a = actor {
-            if a.lowercased().contains("claude") { ClaudeMark() }
-            else { Image(systemName: "sparkle").resizable().scaledToFit().foregroundStyle(.secondary) }
-        } else {
-            Image(systemName: "checkmark.circle.fill").resizable().scaledToFit().foregroundStyle(.green)
-        }
+        if let a = actor { AgentIcon(name: a) }
+        else { Image(systemName: "checkmark.circle.fill").resizable().scaledToFit().foregroundStyle(.green) }
     }
 }

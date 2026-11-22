@@ -1,6 +1,7 @@
 #!/bin/sh
 # Builds Kanba.app next to this script. Usage: ./build.sh
 set -e
+VERSION=${VERSION:-0.0.0}   # VERSION=1.2.3 ./build.sh stamps the app; CI passes the tag
 cd "$(dirname "$0")"
 swift build -c release
 APP=Kanba.app
@@ -17,7 +18,8 @@ cat > $APP/Contents/Info.plist <<PLIST
 <key>CFBundleIconFile</key><string>Icon</string>
 <key>CFBundleName</key><string>Kanba</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>1.0</string>
+<key>CFBundleShortVersionString</key><string>$VERSION</string>
+<key>CFBundleVersion</key><string>$VERSION</string>
 <key>CFBundleDevelopmentRegion</key><string>fr</string>
 <key>LSMinimumSystemVersion</key><string>26.0</string>
 <key>ATSApplicationFontsPath</key><string>Fonts</string>

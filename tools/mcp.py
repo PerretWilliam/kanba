@@ -54,7 +54,15 @@ def to_secs(s):  # ISO date/datetime -> seconds since 2001, "" -> None
 
 def to_iso(secs): return (EPOCH + dt.timedelta(seconds=secs)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
+def agent(x):  # "claude" or {"name": "claude", "model": "Opus 5.5", "effort": "high"} -> stored form
+    x = {"name": x} if isinstance(x, str) else x
+    if not x.get("name"): raise ValueError("an agent needs a name (e.g. claude, codex, gemini, me)")
+    return {"name": x["name"], "model": x.get("model", ""), "effort": x.get("effort", "")}
+
+def has_agent(c, q): return any(q.lower() in (g["name"] + " " + g.get("model", "")).lower() for g in c.get("agents", []))
+
 def apply(c, a, b):
+    if "agents" in a: c["agents"] = [agent(x) for x in a["agents"]]
     if "title" in a: c["title"] = a["title"]
     if "notes" in a: c["notes"] = a["notes"]
     if "priority" in a: c["priority"] = PRIO[a["priority"]]
@@ -82,14 +90,15 @@ def get_boards(a):
     d = load(); q = a.get("query", "").lower()
     def keep(c):
         return (not q or q in " ".join([c["title"], c.get("notes", "")] + c.get("tags", [])).lower()) \
-            and ("priority" not in a or c.get("priority", 1) == PRIO[a["priority"]]) and ("tag" not in a or a["tag"] in c.get("tags", []))
+            and ("priority" not in a or c.get("priority", 1) == PRIO[a["priority"]]) and ("tag" not in a or a["tag"] in c.get("tags", [])) \
+            and ("agent" not in a or has_agent(c, a["agent"]))
     boards = [board_of(d, a["board"])] if "board" in a else d["boards"]
     return {"selected": board_of(d)["id"], "boards": [{
-        "id": b["id"], "name": b["name"], "parent": b.get("parent"), "columns": [{"id": c["id"], "name": c["name"], "color": c["color"]} for c in b["columns"]],
+        "id": b["id"], "name": b["name"], "parent": b.get("parent"), "closed": bool(b.get("closed")), "columns": [{"id": c["id"], "name": c["name"], "color": c["color"]} for c in b["columns"]],
         "done_column": b["columns"][-1]["name"],
         "cards": [{"position": 1 + sum(1 for y in b["cards"][:b["cards"].index(c)] if y["status"] == c["status"]),
                    "id": c["id"], "title": c["title"], "column": next((x["name"] for x in b["columns"] if x["id"] == c["status"]), None),
-                   "priority": ["low", "medium", "high"][c.get("priority", 1)], "tags": c.get("tags", []), "notes": c.get("notes", ""),
+                   "priority": ["low", "medium", "high"][c.get("priority", 1)], "tags": c.get("tags", []), "agents": c.get("agents", []), "notes": c.get("notes", ""),
                    "due": to_iso(c["due"]) if "due" in c else None} for c in b["cards"] if keep(c)]} for b in boards]}
 
 # ---- cards ----
@@ -153,14 +162,22 @@ def add_board(a):
     b["cards"] = [mkcard(b, c) for c in a.get("cards", [])]
     d["boards"].append(b); d["selected"] = b["id"]; save(d); return {"id": b["id"]}
 
-def update_board(a):
-    d = load(); board_of(d, a["board"])["name"] = a["name"]; save(d); return "ok"
+def update_board(a):  # closed=true hides the tab (still listed by get_boards and in the app's Projets menu); false reopens it
+    d = load(); b = board_of(d, a["board"])
+    if "name" in a: b["name"] = a["name"]
+    if "closed" in a:
+        if a["closed"]: b["closed"] = True
+        else: b.pop("closed", None)
+    save(d); return "ok"
 
 def select_board(a):  # UI state, not data: applied immediately
     b = board_of(load(), a["board"])
     for path in (PATH, PROP):
         if os.path.exists(path):
-            x = json.load(open(path)); x["selected"] = b["id"]; write(path, x)
+            x = json.load(open(path)); x["selected"] = b["id"]
+            for y in x["boards"]:
+                if y["id"] == b["id"]: y.pop("closed", None)   # selecting a closed board reopens it
+            write(path, x)
     return "ok"
 
 def delete_board(a):
@@ -170,14 +187,16 @@ def delete_board(a):
     save(d); return "ok"
 
 # ---- export (json = app's share format, csv, markdown) / import (json) ----
+def _ag(g): return " · ".join(x for x in (g["name"], g.get("model", ""), g.get("effort", "")) if x)
+
 def _csv(b):
     import csv, io
     names = {c["id"]: c["name"] for c in b["columns"]}; buf = io.StringIO(); w = csv.writer(buf, lineterminator="\r\n")
-    w.writerow(["Column", "Title", "Notes", "Priority", "Due", "Tags"])
+    w.writerow(["Column", "Title", "Notes", "Priority", "Due", "Tags", "Agents"])
     for col in b["columns"]:
         for c in b["cards"]:
             if c["status"] == col["id"]:
-                w.writerow([names[col["id"]], c["title"], c.get("notes", ""), ["Low", "Medium", "High"][c.get("priority", 1)], to_iso(c["due"])[:10] if "due" in c else "", ", ".join(c.get("tags", []))])
+                w.writerow([names[col["id"]], c["title"], c.get("notes", ""), ["Low", "Medium", "High"][c.get("priority", 1)], to_iso(c["due"])[:10] if "due" in c else "", ", ".join(c.get("tags", [])), "; ".join(_ag(g) for g in c.get("agents", []))])
     return "\ufeff" + buf.getvalue()
 
 def _md(b):
@@ -186,7 +205,7 @@ def _md(b):
         out += ["", f"## {col['name']}", ""]
         for c in b["cards"]:
             if c["status"] != col["id"]: continue
-            meta = [f"Priority: {['Low', 'Medium', 'High'][c.get('priority', 1)]}"] + ([f"due {to_iso(c['due'])[:10]}"] if "due" in c else []) + ([" ".join("#" + t for t in c["tags"])] if c.get("tags") else [])
+            meta = [f"Priority: {['Low', 'Medium', 'High'][c.get('priority', 1)]}"] + ([f"due {to_iso(c['due'])[:10]}"] if "due" in c else []) + ([" ".join("#" + t for t in c["tags"])] if c.get("tags") else []) + (["agents: " + ", ".join(_ag(g) for g in c["agents"])] if c.get("agents") else [])
             out.append(f"- [{'x' if col is b['columns'][-1] else ' '}] **{c['title']}** — {' · '.join(meta)}")
             out += [f"  {l}" for l in c.get("notes", "").splitlines() if l.strip()]
     return "\n".join(out) + "\n"
@@ -215,13 +234,15 @@ S = lambda **p: {"type": "object", "properties": p}
 STR, ARR, BOOL = {"type": "string"}, {"type": "array", "items": {"type": "string"}}, {"type": "boolean"}
 BOARD = {"type": "string", "description": "board name or id (default: the tab on screen)"}
 COLOR = {"enum": COLORS}
-CARD = dict(position={"type": "integer", "description": "1-based rank within its column; 1 = do first. Default: last."}, title=STR, notes=STR, priority={"enum": list(PRIO)}, due={"type": "string", "description": "ISO date, '' to clear"}, tags=ARR,
+AGENTS = {"type": "array", "description": "Who is assigned: any number of agents, each {name, model?, effort?}. name = an AI (claude, codex, chatgpt, gemini, copilot, cursor, windsurf, mistral, deepseek, grok, perplexity, llama, qwen, kimi, zed, cline, aider, opencode, goose, or any other name) or 'me' for the user. model = free text (e.g. 'Opus 5.5', 'GPT-6.2 Sol', 'Gemini 4 Carbon'). effort = minimal | low | medium | high | xhigh | max (Claude and OpenAI: low..max; Gemini: minimal..xhigh; free text accepted). Replaces the whole list; [] clears it. A plain string means just the name.",
+          "items": {"anyOf": [STR, S(name=STR, model=STR, effort=STR)]}}
+CARD = dict(position={"type": "integer", "description": "1-based rank within its column; 1 = do first. Default: last."}, title=STR, notes=STR, priority={"enum": list(PRIO)}, due={"type": "string", "description": "ISO date, '' to clear"}, tags=ARR, agents=AGENTS,
             column={"type": "string", "description": "column name or id"})
 def T(fn, desc, req=(), **props): return (fn, desc, {**S(**props), "required": list(req)})
 TOOLS = {
-    "get_boards": T(get_boards, "List boards (tabs) with columns and cards. The last column of a board is its 'done' column. Optional search/filter like the app's.",
-                    board=BOARD, query=STR, priority={"enum": list(PRIO)}, tag=STR),
-    "add_card": T(add_card, "Add a card (default: first column of the tab on screen).", ["title"], board=BOARD, **CARD),
+    "get_boards": T(get_boards, "List boards (tabs, including closed ones: 'closed': true) with columns and cards (notes are Markdown; agents = assignees). The last column of a board is its 'done' column. Optional search/filter like the app's. Card order = priority order.",
+                    board=BOARD, query=STR, priority={"enum": list(PRIO)}, tag=STR, agent={"type": "string", "description": "only cards assigned to this agent (name or model, e.g. 'claude', 'me', 'opus')"}),
+    "add_card": T(add_card, "Add a card (default: first column of the tab on screen). notes accept Markdown (headings, lists, - [ ] tasks, **bold**, `code`, code blocks, links), rendered in the app's card panel.", ["title"], board=BOARD, **CARD),
     "reorder_cards": T(reorder_cards, "Set the priority order of cards in a column: card_ids go first, in that order (position 1 = do first); other cards follow. Cards are listed by get_boards in this order.", ["column", "card_ids"], board=BOARD, column=STR, card_ids=ARR),
     "update_card": T(update_card, "Edit a card; 'column' moves it within its board, 'to_board' moves it to another board (or phase).", ["card_id"], card_id=STR, to_board=BOARD, **CARD),
     "delete_card": T(delete_card, "Delete a card.", ["card_id"], card_id=STR),
@@ -231,8 +252,8 @@ TOOLS = {
     "delete_column": T(delete_column, "Delete a column; its cards move to the left neighbour. Not the last column.", ["column"], board=BOARD, column=STR),
     "add_board": T(add_board, "Create a board (tab) and switch to it. With parent (a top-level board's id or name) it becomes a phase (sub-board) of that board, with the parent's columns by default. Optional columns (names) and starter cards (same fields as add_card) — use it to recreate any template.",
                    ["name"], name=STR, parent=BOARD, columns=ARR, cards={"type": "array", "items": S(**CARD)}),
-    "update_board": T(update_board, "Rename a board.", ["board", "name"], board=BOARD, name=STR),
-    "select_board": T(select_board, "Switch the app to this tab.", ["board"], board=BOARD),
+    "update_board": T(update_board, "Rename a board and/or close it (closed=true: hides the tab, nothing is deleted, it stays in the app's Projets menu) or reopen it (closed=false).", ["board"], board=BOARD, name=STR, closed=BOOL),
+    "select_board": T(select_board, "Switch the app to this tab (reopens it if it was closed).", ["board"], board=BOARD),
     "delete_board": T(delete_board, "Close a board (tab) or phase and delete its cards (a board's phases go with it). Deleting the last one shows the app's welcome page.", ["board"], board=BOARD),
     "export_board": T(export_board, "Export a board to a file: json (app's share format, re-importable, default), csv (one row per card, opens in Excel) or markdown.", ["path"], board=BOARD, path=STR, format={"type": "string", "enum": ["json", "csv", "markdown"]}, overwrite=BOOL),
     "import_board": T(import_board, "Import a board from a JSON file exported by the app or export_board, as a new tab.", ["path"], path=STR),
@@ -243,7 +264,7 @@ def handle(m):
     global ACTOR, proposed
     if meth == "initialize":
         ACTOR = (p.get("clientInfo") or {}).get("name") or "claude"
-        return {"protocolVersion": p.get("protocolVersion", "2024-11-05"), "capabilities": {"tools": {}}, "serverInfo": {"name": "kanban", "version": "2"}}
+        return {"protocolVersion": p.get("protocolVersion", "2024-11-05"), "capabilities": {"tools": {}}, "serverInfo": {"name": "kanban", "version": "3"}}
     if meth == "tools/list":
         return {"tools": [{"name": n, "description": t[1], "inputSchema": t[2]} for n, t in TOOLS.items()]}
     if meth == "tools/call":
@@ -258,9 +279,12 @@ def handle(m):
     if meth == "ping": return {}
     raise KeyError(meth)
 
-for line in sys.stdin:
-    m = json.loads(line)
-    if "id" not in m: continue  # notification
-    try: r = {"result": handle(m)}
-    except KeyError: r = {"error": {"code": -32601, "message": "method not found"}}
-    print(json.dumps({"jsonrpc": "2.0", "id": m["id"], **r}), flush=True)
+def main(stdin=sys.stdin, stdout=sys.stdout):
+    for line in stdin:
+        m = json.loads(line)
+        if "id" not in m: continue  # notification
+        try: r = {"result": handle(m)}
+        except KeyError: r = {"error": {"code": -32601, "message": "method not found"}}
+        print(json.dumps({"jsonrpc": "2.0", "id": m["id"], **r}), flush=True, file=stdout)
+
+if __name__ == "__main__": main()  # pragma: no cover

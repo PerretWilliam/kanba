@@ -12,13 +12,17 @@ struct Proposal: Codable {
 struct Change: Identifiable {
     enum Kind { case add, remove, edit }
     struct Line { var label: String; var old: String?; var new: String? }
-    let id = UUID()
+    let id: UUID
     var kind: Kind
     var title: String
     var scope = ""                 // board name
     var lines: [Line] = []
     var addedBoard: UUID?          // set when the change creates a board (we switch to it)
     var apply: (inout [Board]) -> Void
+
+    init(kind: Kind, title: String, scope: String = "", lines: [Line] = [], addedBoard: UUID? = nil, apply: @escaping (inout [Board]) -> Void) {
+        id = UUID(); self.kind = kind; self.title = title; self.scope = scope; self.lines = lines; self.addedBoard = addedBoard; self.apply = apply
+    }
 }
 
 extension Proposal {
@@ -29,6 +33,7 @@ extension Proposal {
         var out: [Change] = []
         let old = Dictionary(base.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         let newIDs = Set(new.map(\.id))
+        let agentList: ([Agent]) -> String = { $0.map(\.summary).joined(separator: ", ") }
         let date: (Date) -> String = { $0.formatted(.dateTime.day().month().year().locale(Locale(identifier: "fr_FR"))) }
         func onBoard(_ id: UUID, _ f: @escaping (inout Board) -> Void) -> (inout [Board]) -> Void {
             { b in if let i = b.firstIndex(where: { $0.id == id }) { f(&b[i]) } }
@@ -51,6 +56,11 @@ extension Proposal {
             if ob.name != nb.name {
                 out.append(Change(kind: .edit, title: "Tableau « \(ob.name) »", lines: [.init(label: "Nom", old: ob.name, new: nb.name)],
                                   apply: onBoard(nb.id) { $0.name = nb.name }))
+            }
+
+            if ob.closed != nb.closed {
+                out.append(Change(kind: .edit, title: "Tableau « \(nb.name) »", lines: [.init(label: "Statut", old: ob.closed == true ? "fermé" : "ouvert", new: nb.closed == true ? "fermé" : "ouvert")],
+                                  apply: onBoard(nb.id) { $0.closed = nb.closed }))
             }
 
             // Columns
@@ -103,6 +113,7 @@ extension Proposal {
                     if o.priority != c.priority { l.append(.init(label: "Priorité", old: o.priority.label, new: c.priority.label)) }
                     if o.due != c.due { l.append(.init(label: "Échéance", old: o.due.map(date), new: c.due.map(date) ?? "aucune")) }
                     if o.tags != c.tags { l.append(.init(label: "Tags", old: o.tags.joined(separator: ", "), new: c.tags.joined(separator: ", "))) }
+                    if o.agents != c.agents { l.append(.init(label: "Agents", old: o.agents.isEmpty ? nil : agentList(o.agents), new: c.agents.isEmpty ? "aucun" : agentList(c.agents))) }
                     if o.notes != c.notes { l.append(.init(label: "Notes", old: o.notes.isEmpty ? nil : o.notes, new: c.notes.isEmpty ? "(vide)" : c.notes)) }
                     out.append(Change(kind: .edit, title: "Carte « \(o.title) »", scope: scope, lines: l, apply: onBoard(nb.id) { b in
                         guard let k = b.cards.firstIndex(where: { $0.id == c.id }) else { return }
@@ -111,12 +122,14 @@ extension Proposal {
                         if o.priority != c.priority { b.cards[k].priority = c.priority }
                         if o.due != c.due { b.cards[k].due = c.due }
                         if o.tags != c.tags { b.cards[k].tags = c.tags }
+                        if o.agents != c.agents { b.cards[k].agents = c.agents }
                         if o.status != c.status { b.cards[k].status = b.columns.contains { $0.id == c.status } ? c.status : b.columns[0].id }
                     }))
                 } else {
                     var l: [Change.Line] = [.init(label: "Colonne", old: nil, new: colName(nb, c.status)), .init(label: "Priorité", old: nil, new: c.priority.label)]
                     if let d = c.due { l.append(.init(label: "Échéance", old: nil, new: date(d))) }
                     if !c.tags.isEmpty { l.append(.init(label: "Tags", old: nil, new: c.tags.joined(separator: ", "))) }
+                    if !c.agents.isEmpty { l.append(.init(label: "Agents", old: nil, new: agentList(c.agents))) }
                     if !c.notes.isEmpty { l.append(.init(label: "Notes", old: nil, new: c.notes)) }
                     out.append(Change(kind: .add, title: "Carte « \(c.title) »", scope: scope, lines: l, apply: onBoard(nb.id) { b in
                         guard !b.cards.contains(where: { $0.id == c.id }) else { return }

@@ -5,9 +5,12 @@ struct ContentView: View {
     @State private var sheet: Sheet?
     @State private var filter: Priority?
     @State private var filterTag: String?
+    @State private var filterAgent: String?
+    @State private var detailID: UUID?
+    @FocusState private var searchFocused: Bool
+    @State private var cardToDelete: Card?
     @State private var showFilter = false
     @State private var query = ""
-    @FocusState private var searchFocused: Bool
     // Custom drag (system drag-and-drop keeps a "flying" preview for ~0.5s after release)
     @State private var dragging: Card?
     @State private var dragPoint = CGPoint.zero
@@ -27,7 +30,8 @@ struct ContentView: View {
     }
 
     var body: some View {
-        Group { if store.boards.isEmpty { welcome } else { main } }
+        Group { if store.topBoards.isEmpty { welcome } else { main } }
+            .toolbar { toolbarItems }
             .coordinateSpace(name: "board")
             .pointerStyle(dragging != nil ? .grabActive : nil)
             .overlay {
@@ -52,7 +56,7 @@ struct ContentView: View {
                 case .edit(let card):
                     EditView(card: card, allTags: store.allTags, columns: board.columns,
                              isNew: !board.cards.contains { $0.id == card.id },
-                             onSave: store.upsert, onDelete: store.delete)
+                             onSave: store.upsert)
                 case .new:
                     TemplatesView { store.add($0) }
                 case .review:
@@ -61,13 +65,16 @@ struct ContentView: View {
                     NameSheet(title: title, text: text, onSave: apply)
                 }
             }
+            .confirmationDialog("Supprimer la carte « \(cardToDelete?.title ?? "") » ?", isPresented: Binding(get: { cardToDelete != nil }, set: { if !$0 { cardToDelete = nil } }), presenting: cardToDelete) { c in
+                Button("Supprimer", role: .destructive) { store.delete(c.id) }
+            }
             .confirmationDialog("Supprimer toutes les cartes de « \(board.columns.last?.name ?? "") » ?", isPresented: $confirmClear) {
                 Button("Supprimer", role: .destructive) { store.clearLastColumn() }
             }
             .confirmationDialog("Supprimer \(board.parent == nil ? "le tableau" : "la phase") « \(board.name) » ?", isPresented: $confirmDelete) {
-                Button("Supprimer", role: .destructive) { store.close(store.selected) }
+                Button("Supprimer", role: .destructive) { store.remove(store.selected) }
             } message: { Text(board.parent == nil && !store.phases.isEmpty ? "Ses phases, colonnes et cartes seront supprimées." : "Ses colonnes et ses cartes seront supprimées.") }
-            .onChange(of: store.selected) { filter = nil; filterTag = nil; query = "" }
+            .onChange(of: store.selected) { filter = nil; filterTag = nil; filterAgent = nil; query = ""; detailID = nil }
     }
 
     /// "N to review" pill: opens the diff of what an AI client proposed.
@@ -78,11 +85,9 @@ struct ContentView: View {
                     ActorIcon(actor: p.actor).frame(width: 14, height: 14)
                     Text("\(store.review.count) à valider").font(.inter(12, .medium))
                 }
-                .padding(.horizontal, 12).frame(height: 36)
+                .padding(.horizontal, 6).contentShape(.rect)
             }
-            .buttonStyle(.plain).glassEffect(.regular.interactive(), in: .capsule)
             .help("Revoir les modifications proposées par \(Toast.actorName(p.actor))")
-            .transition(.scale.combined(with: .opacity))
         }
     }
 
@@ -100,7 +105,6 @@ struct ContentView: View {
             .controlSize(.large).padding(.top, 8)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .overlay(alignment: .topTrailing) { reviewButton.padding(16) }
     }
 
     private var main: some View {
@@ -113,88 +117,106 @@ struct ContentView: View {
                 PhaseBar(root: root, phases: store.phases, selected: store.selected,
                          onSelect: { store.selected = $0 },
                          onRename: { b in sheet = .name(title: "Renommer la phase", text: b.name) { store.rename(b.id, $0) } },
-                         onDelete: { store.close($0.id) },
+                         onDelete: { store.remove($0.id) },
                          onNew: { sheet = .name(title: "Nouvelle phase", text: "") { store.addPhase($0) } })
             }
-            header
-            HStack(spacing: 14) {
-                ForEach(board.columns) { col in
-                    ColumnView(column: col, isDone: isDone(col.id), canDelete: board.columns.count > 1,
-                               onRename: { sheet = .name(title: "Renommer la colonne", text: col.name) { store.renameColumn(col.id, $0) } },
-                               onColor: { store.recolorColumn(col.id, $0) },
-                               onDeleteColumn: { store.deleteColumn(col.id) },
-                               onClear: { confirmClear = true },
-                               cards: cards(in: col.id),
-                               draggingID: dragging?.id, highlighted: dragging != nil && column(at: dragPoint) == col.id,
-                               otherBoards: store.boards.filter { $0.id != store.selected }.map { b in
-                                   (b.id, store.boards.first { $0.id == b.parent }.map { "\($0.name) › \(b.name)" } ?? b.name) },
-                               onMoveToBoard: { store.move($0, toBoard: $1) },
-                               onEdit: { sheet = .edit($0) },
-                               onAdd: { sheet = .edit(Card(status: col.id)) },
-                               onFrame: { frames[col.id] = $0 },
-                               onCardFrame: { cardFrames[$0] = $1 },
-                               onDrag: { card, point in dragging = card; dragPoint = point },
-                               onDrop: { card, point in
-                                   if let to = column(at: point) {
-                                       // Insert before the first other card whose middle is below the drop point.
-                                       let rest = cards(in: to).filter { $0.id != card.id }
-                                       let i = rest.firstIndex { (cardFrames[$0.id]?.midY ?? .infinity) > point.y }
-                                       let same = to == card.status && cards(in: to).firstIndex { $0.id == card.id } == (i ?? rest.count)
-                                       if !same { store.drop(card, to: to, before: i.map { rest[$0].id }) }
-                                   }
-                                   dragging = nil
-                               })
-                        .transition(.scale(scale: 0.95).combined(with: .opacity))
+            // The card panel sits beside the columns (they shrink) so no column is ever hidden under it.
+            HStack(alignment: .top, spacing: 0) {
+                HStack(spacing: 14) {
+                    ForEach(board.columns) { col in
+                        ColumnView(column: col, isDone: isDone(col.id), canDelete: board.columns.count > 1,
+                                   onRename: { sheet = .name(title: "Renommer la colonne", text: col.name) { store.renameColumn(col.id, $0) } },
+                                   onColor: { store.recolorColumn(col.id, $0) },
+                                   onDeleteColumn: { store.deleteColumn(col.id) },
+                                   onClear: { confirmClear = true },
+                                   cards: cards(in: col.id),
+                                   draggingID: dragging?.id, highlighted: dragging != nil && column(at: dragPoint) == col.id,
+                                   moveTargets: store.moveTargets,
+                                   onMoveToBoard: { store.move($0, toBoard: $1) },
+                                   onOpen: { detailID = $0.id },
+                                   onEdit: { sheet = .edit($0) },
+                                   onAdd: { sheet = .edit(Card(status: col.id)) },
+                                   onFrame: { frames[col.id] = $0 },
+                                   onCardFrame: { cardFrames[$0] = $1 },
+                                   onDrag: { card, point in dragging = card; dragPoint = point },
+                                   onDrop: { card, point in
+                                       if let to = column(at: point) {
+                                           // Insert before the first other card whose middle is below the drop point.
+                                           let rest = cards(in: to).filter { $0.id != card.id }
+                                           let i = rest.firstIndex { (cardFrames[$0.id]?.midY ?? .infinity) > point.y }
+                                           let same = to == card.status && cards(in: to).firstIndex { $0.id == card.id } == (i ?? rest.count)
+                                           if !same { store.drop(card, to: to, before: i.map { rest[$0].id }) }
+                                       }
+                                       dragging = nil
+                                   })
+                            .transition(.scale(scale: 0.95).combined(with: .opacity))
+                    }
+                    Button { sheet = .name(title: "Nouvelle colonne", text: "") { store.addColumn($0) } } label: {
+                        Image(systemName: "plus").foregroundStyle(.secondary).frame(width: 34).frame(maxHeight: .infinity)
+                            .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: 22, style: .continuous))
+                    }
+                    .buttonStyle(.plain).help("Ajouter une colonne")
                 }
-                Button { sheet = .name(title: "Nouvelle colonne", text: "") { store.addColumn($0) } } label: {
-                    Image(systemName: "plus").foregroundStyle(.secondary).frame(width: 34).frame(maxHeight: .infinity)
-                        .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: 22, style: .continuous))
+                .padding(EdgeInsets(top: 12, leading: 14, bottom: 14, trailing: 14))
+                .frame(maxHeight: .infinity)
+                .id(store.selected)  // fresh subtree per tab: no card/column transitions between boards
+                if let c = detailCard {
+                    CardDetail(card: c, column: board.columns.first { $0.id == c.status }, isDone: isDone(c.status),
+                               onEdit: { sheet = .edit(c) }, onDelete: { cardToDelete = c }, onClose: { detailID = nil })
+                        .padding(EdgeInsets(top: 12, leading: 0, bottom: 14, trailing: 14)).transition(.move(edge: .trailing).combined(with: .opacity))
                 }
-                .buttonStyle(.plain).help("Ajouter une colonne")
             }
-            .padding([.horizontal, .bottom], 14)
-            .frame(maxHeight: .infinity)
-            .id(store.selected)  // fresh subtree per tab: no card/column transitions between boards
+            .animation(.snappy(duration: 0.25), value: detailID)
         }
     }
 
-    private var header: some View {
-        HStack(spacing: 10) {
-            LogoMark()
-            Text("Kanba").font(.mono(18, .bold))
-            Spacer()
+    private var detailCard: Card? { detailID.flatMap { id in board.cards.first { $0.id == id } } }
+
+    /// Window toolbar (the title bar space we already pay for): no separate header row.
+    @ToolbarContentBuilder private var toolbarItems: some ToolbarContent {
+        ToolbarSpacer(.flexible)
+        ToolbarItemGroup(placement: .primaryAction) {
             reviewButton
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                 TextField("Rechercher", text: $query).textFieldStyle(.plain).focused($searchFocused)
                 if !query.isEmpty {
-                    Button { query = "" } label: { Image(systemName: "xmark.circle.fill") }
-                        .buttonStyle(.plain).foregroundStyle(.secondary)
+                    Button { query = "" } label: { Image(systemName: "xmark.circle.fill") }.buttonStyle(.plain).foregroundStyle(.secondary)
                 }
                 Button("") { searchFocused = true }.keyboardShortcut("f").opacity(0).frame(width: 0)
             }
-            .padding(.horizontal, 12).frame(width: 220, height: 36)
-            .glassEffect(.regular, in: .capsule)
-            GlassEffectContainer(spacing: 8) {
-                HStack(spacing: 8) {
-                    IconButton("line.3.horizontal.decrease", "Filtrer",
-                               filter == nil && filterTag == nil ? .primary : .accentColor) { showFilter = true }
-                        .popover(isPresented: $showFilter, arrowEdge: .bottom) { FilterPanel(filter: $filter, tag: $filterTag, tags: store.allTags) }
-                    Menu {
-                        ForEach(BoardIO.Format.allCases, id: \.self) { f in Button("Exporter en \(f.label)…") { BoardIO.export(board, as: f) } }
-                    } label: {
-                        Image(systemName: "square.and.arrow.up").font(.system(size: 15, weight: .medium)).frame(width: 20, height: 20)
+            .padding(.horizontal, 10).frame(width: 200, height: 30)
+            .background(.quaternary.opacity(0.5), in: .capsule)
+            Menu {
+                ForEach(store.allTopBoards) { b in
+                    Button { store.reopen(b.id) } label: {
+                        if b.id == store.rootID && b.closed != true { Label(b.name, systemImage: "checkmark") }
+                        else { Text(b.closed == true ? "\(b.name) · fermé" : b.name) }
                     }
-                    .menuIndicator(.hidden).help("Exporter le tableau")
-                    IconButton("trash", "Supprimer le tableau", .red) { confirmDelete = true }
-                    IconButton("plus", "Nouvelle carte", .accentColor) { sheet = .edit(Card(status: board.columns[0].id)) }
-                        .keyboardShortcut("n")
                 }
-                .buttonStyle(.glass).buttonBorderShape(.circle).controlSize(.large)
-            }
+                Divider()
+                Button("Nouveau tableau…") { sheet = .new }
+            } label: { bar("square.stack") }
+                .help("Tous les projets")
+            let active = filter != nil || filterTag != nil || filterAgent != nil
+            Button { showFilter = true } label: { bar("line.3.horizontal.decrease", active ? .accentColor : .primary) }
+                .help("Filtrer").disabled(store.topBoards.isEmpty)
+                .popover(isPresented: $showFilter, arrowEdge: .bottom) {
+                    FilterPanel(filter: $filter, tag: $filterTag, agent: $filterAgent, tags: store.allTags, agents: store.allAgents)
+                }
+            Menu {
+                ForEach(BoardIO.Format.allCases, id: \.self) { f in Button("Exporter en \(f.label)…") { BoardIO.export(board, as: f) } }
+            } label: { bar("square.and.arrow.up") }
+                .help("Exporter le tableau").disabled(store.topBoards.isEmpty)
+            Button { confirmDelete = true } label: { bar("trash", .red) }
+                .help("Supprimer le tableau").disabled(store.topBoards.isEmpty)
+            Button { sheet = .edit(Card(status: board.columns[0].id)) } label: { bar("plus", .accentColor) }
+                .help("Nouvelle carte").keyboardShortcut("n").disabled(store.topBoards.isEmpty)
         }
-        .padding(.horizontal, 16)
-        .frame(height: 52)
+    }
+
+    private func bar(_ name: String, _ tint: Color = .primary) -> some View {
+        Image(systemName: name).font(.system(size: 14, weight: .medium)).foregroundStyle(tint).frame(width: 34, height: 30).contentShape(.rect)
     }
 
     private func column(at p: CGPoint) -> String? {
@@ -206,6 +228,7 @@ struct ContentView: View {
         board.cards   // manual order = array order (drag to reorder; AI clients set it too)
             .filter { $0.status == column && (filter == nil || $0.priority == filter)
                 && (filterTag == nil || $0.tags.contains(filterTag!))
-                && (query.isEmpty || ([$0.title, $0.notes] + $0.tags).contains { $0.localizedStandardContains(query) }) }
+                && (filterAgent == nil || $0.agents.contains { $0.key == filterAgent })
+                && (query.isEmpty || ([$0.title, $0.notes] + $0.tags + $0.agents.flatMap { [$0.label, $0.model] }).contains { $0.localizedStandardContains(query) }) }
     }
 }

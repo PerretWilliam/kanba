@@ -1,0 +1,29 @@
+name: Release
+# Push a tag vX.Y.Z (just release X.Y.Z): tests, build, zip, checksum, GitHub Release with generated notes.
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install coverage
+      - name: Gates (tests + 100% coverage)
+        run: tools/swift-coverage.sh && tools/py-coverage.sh
+      - name: Build
+        run: VERSION="${GITHUB_REF_NAME#v}" ./build.sh
+      - name: Package
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          ditto -c -k --keepParent Kanba.app "Kanba-$V.zip"
+          cp tools/mcp.py kanba-mcp.py
+          shasum -a 256 "Kanba-$V.zip" kanba-mcp.py > SHA256SUMS
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes --title "Kanba ${GITHUB_REF_NAME#v}" "Kanba-${GITHUB_REF_NAME#v}.zip" kanba-mcp.py SHA256SUMS

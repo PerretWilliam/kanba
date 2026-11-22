@@ -28,6 +28,7 @@ struct Board: Identifiable, Codable {
     var name: String
     var columns = Board.defaultColumns
     var cards: [Card] = []
+    var closed: Bool?   // hidden from the tabs (still listed in the Projets menu); nil = open
     var parent: UUID?   // set = a phase (sub-board) of that board; its own columns and cards
 
     // Fixed ids so cards saved before columns became dynamic ("todo"/"doing"/"done") still match.
@@ -51,6 +52,7 @@ struct Card: Identifiable, Codable, Equatable {
     var due: Date?
     var status = ""
     var tags: [String] = []
+    var agents: [Agent] = []
 }
 
 // Tolerant decoding so cards saved before a field existed still load.
@@ -64,5 +66,6 @@ extension Card {
         due = try c.decodeIfPresent(Date.self, forKey: .due)
         status = try c.decodeIfPresent(String.self, forKey: .status) ?? ""
         tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
+        agents = try c.decodeIfPresent([Agent].self, forKey: .agents) ?? []
     }
 }

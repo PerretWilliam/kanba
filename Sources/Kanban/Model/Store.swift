@@ -1,5 +1,11 @@
 import SwiftUI
 
+struct MoveTarget: Identifiable {
+    let id: UUID, name: String
+    var general = true          // the tab itself can be chosen (it is not the current board)
+    var phases: [MoveTarget] = []
+}
+
 // MARK: - Store (JSON in ~/Library/Application Support/Kanban)
 
 @MainActor final class Store: ObservableObject {
@@ -130,11 +136,23 @@ import SwiftUI
     private var index: Int { boards.firstIndex { $0.id == selected } ?? 0 }
     var board: Board { boards.indices.contains(index) ? boards[index] : Board(name: "") }   // placeholder while there are no boards (welcome page)
     /// Boards shown as tabs: everything that is not a phase (an orphaned phase counts as a board).
-    var topBoards: [Board] { boards.filter { b in b.parent.map { p in !boards.contains { $0.id == p } } ?? true } }
+    var allTopBoards: [Board] { boards.filter { b in b.parent.map { p in !boards.contains { $0.id == p } } ?? true } }
+    var topBoards: [Board] { allTopBoards.filter { $0.closed != true } }
     /// The tab the current board belongs to (itself, or its parent when it is a phase).
     var rootID: UUID { board.parent.flatMap { p in boards.first { $0.id == p }?.id } ?? board.id }
+    /// Destinations for "move card": each tab, with its phases as a submenu. The current board is left out;
+    /// a tab with no other phase is a plain item, otherwise a submenu ("Général" = the tab itself).
+    var moveTargets: [MoveTarget] {
+        allTopBoards.compactMap { t in
+            let ph = boards.filter { $0.parent == t.id && $0.id != selected }.map { MoveTarget(id: $0.id, name: $0.name) }
+            return ph.isEmpty && t.id == selected ? nil : MoveTarget(id: t.id, name: t.name, general: t.id != selected, phases: ph)
+        }
+    }
     var phases: [Board] { boards.filter { $0.parent == rootID } }
     var allTags: [String] { Array(Set(board.cards.flatMap(\.tags))).sorted() }
+    var allAgents: [Agent] {   // one entry per distinct agent on the board (for the filter)
+        var seen = Set<String>(); return board.cards.flatMap(\.agents).filter { seen.insert($0.key).inserted }.sorted { $0.label < $1.label }
+    }
 
     /// Mutates the current board with a single assignment (= a single save).
     func edit(_ change: (inout Board) -> Void) { guard !boards.isEmpty else { return }; var b = boards; change(&b[index]); boards = b }
@@ -235,15 +253,33 @@ import SwiftUI
         notify("Tableau renommé « \(name) »")
     }
 
+    /// Closing a tab only hides it (and its phases): it stays in the Projets menu, `open` brings it back.
     func close(_ id: UUID) {
+        guard let i = boards.firstIndex(where: { $0.id == id }) else { return }
+        let name = boards[i].name, wasCurrent = rootID == id
+        let topIndex = topBoards.firstIndex { $0.id == id }
+        boards[i].closed = true
+        notify("Tableau « \(name) » fermé : retrouvez-le dans Projets")
+        let t = topBoards
+        if wasCurrent, !t.isEmpty { selected = t[min(max((topIndex ?? 0) - 1, 0), t.count - 1)].id }
+    }
+
+    func reopen(_ id: UUID) {
+        guard let i = boards.firstIndex(where: { $0.id == id }) else { return }
+        if boards[i].closed == true { boards[i].closed = nil }
+        selected = id
+    }
+
+    /// Permanently deletes a board or phase (a board takes its phases with it).
+    func remove(_ id: UUID) {
         guard let i = boards.firstIndex(where: { $0.id == id }) else { return }
         let name = boards[i].name, parent = boards[i].parent
         let tops = topBoards, topIndex = tops.firstIndex { $0.id == id }
-        defer { notify("Tableau « \(name) » fermé") }
-        boards.removeAll { $0.id == id || $0.parent == id }   // a tab takes its phases with it
+        defer { notify("Tableau « \(name) » supprimé") }
+        boards.removeAll { $0.id == id || $0.parent == id }
         if !boards.contains(where: { $0.id == selected }), !boards.isEmpty {
             let t = topBoards
-            selected = parent.flatMap { p in boards.first { $0.id == p }?.id } ?? t[min(max((topIndex ?? 0) - 1, 0), t.count - 1)].id
+            selected = parent.flatMap { p in boards.first { $0.id == p }?.id } ?? (t.isEmpty ? boards[0].id : t[min(max((topIndex ?? 0) - 1, 0), t.count - 1)].id)
         }
     }
 }

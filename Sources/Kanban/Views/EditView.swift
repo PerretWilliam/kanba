@@ -8,15 +8,14 @@ struct EditView: View {
     @State private var showCalendar = false
     let isNew: Bool
     let onSave: (Card) -> Void
-    let onDelete: (UUID) -> Void
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(isNew ? "Nouvelle carte" : "Modifier la carte").font(.inter(17, .semibold))
             field("Titre") { TextField("", text: $card.title).textFieldStyle(.roundedBorder) }
-            field("Notes") {
-                TextField("", text: $card.notes, axis: .vertical).lineLimit(3...6)
+            field("Notes (Markdown)") {
+                TextField("", text: $card.notes, axis: .vertical).lineLimit(4...10)
                     .textFieldStyle(.roundedBorder)
             }
             field("Tags") {
@@ -35,6 +34,31 @@ struct EditView: View {
                         if !t.isEmpty && !card.tags.contains(t) { card.tags.append(t) }
                         newTag = ""
                     }
+            }
+            field("Agents") {
+                ForEach($card.agents) { $a in
+                    HStack(spacing: 6) {
+                        Menu {
+                            ForEach(Agents.all) { k in agentButton(k) { a.name = k.key } }
+                            Button("Autre…") { a.name = "" }
+                        } label: { Label { Text(a.kind?.label ?? "Autre") } icon: { Image(nsImage: AgentIcon.menuImage(a.name)) } }
+                            .fixedSize()
+                        if a.kind == nil { TextField("Nom", text: $a.name).textFieldStyle(.roundedBorder).frame(width: 80) }
+                        SuggestField(prompt: "Modèle", text: $a.model, options: a.kind?.models ?? [])
+                        Menu {
+                            Button("Aucun") { a.effort = "" }
+                            ForEach(Agents.efforts(for: a.name), id: \.0) { e in Button(e.1) { a.effort = e.0 } }
+                        } label: { Text(a.effort.isEmpty ? "Effort" : Agents.effortLabel(a.effort)) }
+                            .fixedSize()
+                        Button { card.agents.removeAll { $0.uid == a.uid } } label: { Image(systemName: "minus.circle.fill") }
+                            .buttonStyle(.borderless).foregroundStyle(.secondary)
+                    }
+                }
+                Menu("Ajouter un agent") {
+                    ForEach(Agents.all) { k in agentButton(k) { card.agents.append(Agent(name: k.key)) } }
+                    Button("Autre…") { card.agents.append(Agent(name: "")) }
+                }
+                .fixedSize()
             }
             field("Priorité") {
                 Picker("", selection: $card.priority) {
@@ -65,15 +89,14 @@ struct EditView: View {
                 }
             }
             HStack {
-                if !isNew { Button("Supprimer", role: .destructive) { onDelete(card.id); dismiss() } }
                 Spacer()
-                Button("Annuler", role: .cancel) { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Annuler", role: .cancel) { dismiss() }.buttonStyle(.glass).keyboardShortcut(.cancelAction)
                 Button("Enregistrer") { onSave(card); dismiss() }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
                     .keyboardShortcut(.defaultAction)
                     .disabled(card.title.trimmingCharacters(in: .whitespaces).isEmpty)
             }
-            .controlSize(.large)
+            .font(.system(size: 13))  // system font on buttons: native look
         }
         .multilineTextAlignment(.leading)
         .font(.inter(13))
@@ -81,10 +104,31 @@ struct EditView: View {
         .frame(width: 420)
     }
 
+    private func agentButton(_ k: AgentKind, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) { Label { Text(k.label) } icon: { Image(nsImage: AgentIcon.menuImage(k.key)) } }
+    }
+
     private func field<C: View>(_ label: String, @ViewBuilder _ content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(label).font(.inter(12, .medium)).foregroundStyle(.secondary)
             content()
+        }
+    }
+}
+
+/// Text field with a menu of suggestions (free text stays possible).
+struct SuggestField: View {
+    let prompt: String
+    @Binding var text: String
+    let options: [String]
+
+    var body: some View {
+        HStack(spacing: 2) {
+            TextField(prompt, text: $text).textFieldStyle(.roundedBorder)
+            if !options.isEmpty {
+                Menu { ForEach(options, id: \.self) { o in Button(o) { text = o } } } label: { Image(systemName: "chevron.down") }
+                    .menuIndicator(.hidden).fixedSize()
+            }
         }
     }
 }

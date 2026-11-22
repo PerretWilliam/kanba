@@ -3,7 +3,9 @@ import SwiftUI
 struct FilterPanel: View {
     @Binding var filter: Priority?
     @Binding var tag: String?
+    @Binding var agent: String?
     let tags: [String]
+    let agents: [Agent]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -22,8 +24,17 @@ struct FilterPanel: View {
                     }
                 }
             }
-            if filter != nil || tag != nil {
-                Button("Réinitialiser") { filter = nil; tag = nil }
+            if !agents.isEmpty {
+                Text("Agent").font(.inter(12, .medium)).foregroundStyle(.secondary)
+                FlowLayout {
+                    ForEach(agents) { a in
+                        HStack(spacing: 4) { AgentIcon(name: a.name).frame(width: 12, height: 12); TagChip(tag: a.label, on: agent == a.key, tint: a.kind?.color) }
+                            .onTapGesture { agent = agent == a.key ? nil : a.key }
+                    }
+                }
+            }
+            if filter != nil || tag != nil || agent != nil {
+                Button("Réinitialiser") { filter = nil; tag = nil; agent = nil }
             }
         }
         .padding(16).frame(width: 300, alignment: .leading)

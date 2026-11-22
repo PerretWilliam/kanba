@@ -10,6 +10,8 @@ swift build          # compile
 ./build.sh           # build and sign Kanba.app
 ```
 
+Tasks: `just` lists them (`just test`, `just cover`, `just build`).
+
 Requires macOS 26+ and Swift 6 (the code builds in Swift 5 language mode).
 
 ## Guidelines
@@ -18,13 +20,19 @@ Requires macOS 26+ and Swift 6 (the code builds in Swift 5 language mode).
 - Match the existing style (compact, no needless abstractions).
 - The on-disk format is documented in [CLAUDE.md](CLAUDE.md). Don't break existing `boards.json` files.
 - AI-driven changes must keep going through `proposal.json` — never write `boards.json` from the MCP server (except `select_board`).
+- Add tests. `just cover` must pass: 100% line coverage of the logic layer (`Sources/Kanban/Model`, `Support/BoardFile.swift`) and of `tools/mcp.py` (needs `pip install coverage`). SwiftUI views are excluded: keep logic out of them so it can be tested.
+- AI logos come from [Simple Icons](https://simpleicons.org) (CC0) via `just logos`; never hand-draw a brand logo.
 - Test your change by running the app. For the MCP server, pipe JSON-RPC lines into `python3 tools/mcp.py` and check the proposal appears in the app. Set `KANBA_DATA=/some/empty/folder` (for both the app and the MCP server) to experiment without touching your real boards.
 
 ## Pull requests
 
 1. Fork and create a branch from `master`.
 2. Describe what changed and why; add a screenshot for UI changes.
-3. Make sure `./build.sh` succeeds.
+3. Make sure `just cover` and `./build.sh` succeed (CI checks both).
+
+## Releases
+
+Maintainers: `just release 1.2.0` (from a clean `master`) runs the gates, tags `v1.2.0` and pushes it. The Release workflow rebuilds, tests, zips `Kanba.app` (ad-hoc signed, not notarized: right-click → Open the first time), and publishes a GitHub Release with generated notes, `kanba-mcp.py` and `SHA256SUMS`.
 
 ## Reporting bugs
 

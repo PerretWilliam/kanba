@@ -5,7 +5,8 @@ struct Template: Identifiable {
     struct Col { var name: String, color: ColumnColor }
     struct Item {
         var title: String, notes = "", col = 0, priority = Priority.medium
-        var tags: [String] = [], dueInDays: Int?
+        var tags: [String]
+        var dueInDays: Int?
     }
     let id: String, name: String, blurb: String, icon: String, color: Color
     let columns: [Col], items: [Item]

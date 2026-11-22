@@ -63,3 +63,9 @@ Issues and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 ## License
 
 [MIT](LICENSE). Bundled fonts: [Inter](https://rsms.me/inter/) and [JetBrains Mono](https://www.jetbrains.com/lp/mono/), both under the SIL Open Font License.
+
+## Releases & tests
+
+Download `Kanba-X.Y.Z.zip` from the [Releases](https://github.com/PerretWilliam/kanba/releases) page (ad-hoc signed: right-click → Open the first time). `kanba-mcp.py` is the MCP server. See [CONTRIBUTING.md](CONTRIBUTING.md) for `just test` / `just cover` (100% line coverage of the logic layer and the MCP server).
+
+AI logos are from [Simple Icons](https://simpleicons.org) (CC0); the marks belong to their owners and only identify the AI assigned to a card.
