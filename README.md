@@ -4,6 +4,8 @@
 
 <p align="center">A fast, native macOS kanban board — that your AI assistant can use too, with you approving every change.</p>
 
+[![M8ven Score](https://m8ven.ai/badge/mcp/perretwilliam-kanba-92amp2?v=365e7e4ac19c5e5cb10f35b453e92f66)](https://m8ven.ai/mcp/perretwilliam-kanba-92amp2?s=readme)
+
 ![Kanba board](docs/board.png)
 
 ## Features
