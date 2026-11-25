@@ -11,19 +11,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }   # full history + tags for the changelog
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.12" }
-      - run: pip install coverage
       - name: Gates (tests + 100% coverage)
-        run: tools/swift-coverage.sh && tools/py-coverage.sh
+        run: tools/swift-coverage.sh
       - name: Build
         run: VERSION="${GITHUB_REF_NAME#v}" ./build.sh
       - name: Package
         run: |
           V="${GITHUB_REF_NAME#v}"
           ditto -c -k --keepParent Kanba.app "Kanba-$V.zip"
-          cp tools/kanba_mcp.py kanba-mcp.py
-          shasum -a 256 "Kanba-$V.zip" kanba-mcp.py > SHA256SUMS
+          shasum -a 256 "Kanba-$V.zip" > SHA256SUMS
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
@@ -31,4 +27,4 @@ jobs:
           # Changelog = commits since the previous tag (generated notes alone only list merged PRs).
           PREV=$(git describe --tags --abbrev=0 "$GITHUB_REF_NAME^" 2>/dev/null || true)
           git log ${PREV:+$PREV..}"$GITHUB_REF_NAME" --no-merges --format='- %s' > NOTES.md
-          gh release create "$GITHUB_REF_NAME" --verify-tag --notes-file NOTES.md --generate-notes --title "Kanba ${GITHUB_REF_NAME#v}" "Kanba-${GITHUB_REF_NAME#v}.zip" kanba-mcp.py SHA256SUMS
+          gh release create "$GITHUB_REF_NAME" --verify-tag --notes-file NOTES.md --generate-notes --title "Kanba ${GITHUB_REF_NAME#v}" "Kanba-${GITHUB_REF_NAME#v}.zip" SHA256SUMS

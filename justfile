@@ -6,15 +6,13 @@ default:
 build:
     ./build.sh
 
-# Run all tests (Swift + MCP server)
+# Run all tests
 test:
     swift test
-    python3 -m unittest discover -s Tests
 
-# Tests + the 100% line-coverage gate on the logic layer (Swift) and the MCP server (Python)
+# Tests + the 100% line-coverage gate on the logic layer (including the MCP server)
 cover:
     tools/swift-coverage.sh
-    tools/py-coverage.sh
 
 # Re-download the AI logos (Simple Icons) into Sources/Kanban/Model/Logos.swift
 logos:

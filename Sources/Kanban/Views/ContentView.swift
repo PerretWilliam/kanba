@@ -28,6 +28,7 @@ struct ContentView: View {
     var body: some View {
         Group { if store.topBoards.isEmpty { welcome } else { main } }
             .toolbar { toolbarItems }
+            .task { MCPHTTP.start(store) }
             .coordinateSpace(name: "board")
             .pointerStyle(dragging != nil ? .grabActive : nil)
             .overlay {

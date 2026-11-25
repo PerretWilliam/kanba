@@ -266,94 +266,64 @@ import Foundation
         #expect(await eventually { s.boards.isEmpty })
     }
 
-    @Test func filterIsScreenStateSetByAOneShotFile() async throws {
+    @Test func filterIsScreenStateNeverSaved() throws {
         let a = Board(name: "A"), b = Board(name: "B")
-        let dir0 = Self.tmp(); try Data(#"{"tag":"old"}"#.utf8).write(to: dir0.appendingPathComponent("filter.json"))   // leftover from a previous run
-        setenv("KANBA_DATA", dir0.path, 1)
-        #expect(Store().filter.isEmpty && !FileManager.default.fileExists(atPath: dir0.appendingPathComponent("filter.json").path))
         let (s, dir) = try make(boards: [a, b], selected: a.id)
-        let file = dir.appendingPathComponent("filter.json")
         s.filter = ViewFilter(agent: "claude", query: "x")     // typing in the app never touches the disk
         let boardsJSON = try String(contentsOf: dir.appendingPathComponent("boards.json"), encoding: .utf8)
         #expect(!boardsJSON.contains("filter") && !boardsJSON.contains("claude"))
         s.selected = b.id                                      // another tab: filter reset
         #expect(s.filter.isEmpty)
-        try Data(#"{"tag":"ops","priority":2}"#.utf8).write(to: file, options: .atomic)   // MCP set_filter
-        #expect(await eventually { s.filter.tag == "ops" })
-        #expect(s.filter.priority == .high && !FileManager.default.fileExists(atPath: file.path))   // applied, then deleted
-        try Data(#"{}"#.utf8).write(to: file, options: .atomic)   // no argument: cleared
-        #expect(await eventually { s.filter.isEmpty })
-        try Data("nope".utf8).write(to: file, options: .atomic)   // invalid: ignored
-        try await Task.sleep(for: .milliseconds(300))
-        #expect(s.filter.isEmpty)
     }
 
-    // MARK: AI proposals
+    // MARK: AI proposals (MCP)
 
-    func propose(_ s: Store, _ dir: URL, actor: String = "claude-code", _ change: (inout [Board]) -> Void) throws {
-        var new = s.boards; change(&new)
-        try JSONEncoder().encode(Proposal(actor: actor, base: s.boards, boards: new)).write(to: dir.appendingPathComponent("proposal.json"), options: .atomic)
+    func propose(_ s: Store, actor: String = "claude-code", _ change: (inout [Board]) -> Void) {
+        var new = s.proposal?.boards ?? s.boards; change(&new)
+        s.propose(actor: actor, boards: new)
     }
 
-    @Test func proposalAcceptedPartially() async throws {
-        let (s, dir) = try make()
+    @Test func proposalAcceptedPartially() throws {
+        let (s, _) = try make()
         s.upsert(card("keep"))
-        try propose(s, dir) { $0[0].cards[0].title = "renamed"; $0[0].columns[0].name = "Todo"; $0[0].cards.append(Card(title: "added", status: "todo")) }
-        #expect(await eventually { s.proposal != nil })
+        propose(s) { $0[0].cards[0].title = "renamed"; $0[0].columns[0].name = "Todo"; $0[0].cards.append(Card(title: "added", status: "todo")) }
         #expect(s.review.count == 3 && s.toast?.text == "Claude propose 3 modifications" && s.toast?.actor == "claude-code")
         let first = s.review[0].id
         s.accept([first])
         #expect(s.proposal == nil && s.review.isEmpty && s.toast?.text == "1 modification appliquée")
-        #expect(!FileManager.default.fileExists(atPath: dir.appendingPathComponent("proposal.json").path))
         #expect(s.boards[0].columns[0].name == "Todo" && s.boards[0].cards.count == 1 && s.boards[0].cards[0].title == "keep")
     }
 
-    @Test func proposalAcceptedWithNewBoardAndRefused() async throws {
-        let (s, dir) = try make()
+    @Test func proposalAcceptedWithNewBoardAndRefused() throws {
+        let (s, _) = try make()
         let nb = Board(name: "AI board")
-        try propose(s, dir, actor: "gemini-cli") { $0.append(nb) }
-        #expect(await eventually { s.proposal != nil })
+        propose(s, actor: "gemini-cli") { $0.append(nb) }
         #expect(s.toast?.text == "Gemini propose 1 modification")
         s.accept(Set(s.review.map(\.id)))
         #expect(s.selected == nb.id && s.toast?.text == "1 modification appliquée")
 
-        try propose(s, dir) { $0.removeAll { $0.id == nb.id } }   // removes the selected board: back to the first
-        #expect(await eventually { s.proposal != nil })
+        propose(s) { $0.removeAll { $0.id == nb.id } }   // removes the selected board: back to the first
         s.accept(Set(s.review.map(\.id)))
         #expect(s.boards.count == 1 && s.selected == s.boards[0].id)
 
-        try propose(s, dir) { $0[0].name = "x"; $0[0].closed = true }
-        #expect(await eventually { s.proposal != nil })
+        propose(s) { $0[0].name = "x"; $0[0].closed = true }
         s.accept([])
         #expect(s.toast?.text == "Aucune modification appliquée" && s.boards[0].name == "Mon Kanban")
 
-        try propose(s, dir) { $0[0].name = "again" }
-        #expect(await eventually { s.proposal != nil })
+        propose(s) { $0[0].name = "again" }
         s.reject()
         #expect(s.proposal == nil && s.toast?.text == "Modifications refusées")
         s.reject(); s.accept([UUID()])   // nothing pending: no-ops
         #expect(s.boards[0].name == "Mon Kanban")
     }
 
-    @Test func proposalEdgeCases() async throws {
-        let (s, dir) = try make()
-        let url = dir.appendingPathComponent("proposal.json")
-        try Data("garbage".utf8).write(to: url)   // invalid: ignored
-        try await Task.sleep(for: .milliseconds(300))
-        #expect(s.proposal == nil)
-        try JSONEncoder().encode(Proposal(actor: "x", base: s.boards, boards: s.boards)).write(to: url, options: .atomic)   // no change: dropped
-        #expect(await eventually { !FileManager.default.fileExists(atPath: url.path) })
-        #expect(s.proposal == nil)
-
-        try propose(s, dir) { $0[0].name = "p" }
-        #expect(await eventually { s.proposal != nil })
-        let data = try Data(contentsOf: url)
-        try data.write(to: url, options: .atomic)   // same bytes again: not reloaded (no second toast)
-        try await Task.sleep(for: .milliseconds(300))
-        #expect(s.review.count == 1)
-        try FileManager.default.removeItem(at: url)   // withdrawn by the AI client
-        #expect(await eventually { s.proposal == nil })
-        #expect(s.review.isEmpty)
+    @Test func proposalsBuildOnEachOtherAndCancelOut() throws {
+        let (s, _) = try make()
+        propose(s) { $0[0].name = "p" }
+        propose(s) { $0[0].columns[0].name = "Q" }   // a second call adds to the pending proposal, same base
+        #expect(s.review.count == 2 && s.proposal?.base[0].name == "Mon Kanban")
+        propose(s) { $0[0].name = "Mon Kanban"; $0[0].columns[0].name = "À faire" }   // back to the start: nothing left to review
+        #expect(s.proposal == nil && s.review.isEmpty)
     }
 
     @Test func inPlaceEditAndAddedFileAreDetected() async throws {
@@ -370,7 +340,7 @@ import Foundation
     }
 
     @Test func movingTheDataFolder() throws {
-        Store.pointer = Self.tmp().appendingPathComponent("folder.txt")
+        defer { UserDefaults.standard.removeObject(forKey: "dataFolder") }
         let (s, old) = try make(boards: [Board(name: "A")])
         s.move(to: old)   // same folder: nothing
         #expect(s.toast == nil)
@@ -378,7 +348,7 @@ import Foundation
         s.move(to: empty)
         #expect(s.dir == empty)
         #expect(try saved(empty).boards.first?.name == "A")
-        #expect(try String(contentsOf: Store.pointer, encoding: .utf8) == empty.path)
+        #expect(UserDefaults.standard.string(forKey: "dataFolder") == empty.path)
         s.edit { $0.name = "A2" }
         #expect(try saved(empty).boards.first?.name == "A2")
         #expect(try saved(old).boards.first?.name == "A")   // the old folder is left alone

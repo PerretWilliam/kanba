@@ -1,7 +1,0 @@
-#!/bin/sh
-# MCP server tests; fails unless tools/kanba_mcp.py is 100% line-covered. Needs `coverage` and `mcp` (pip install coverage "mcp>=2,<3"; the repo's .venv is used if present).
-set -e
-cd "$(dirname "$0")/.."
-PY=python3; [ -x .venv/bin/python ] && PY=.venv/bin/python
-$PY -m coverage run -m unittest discover -s Tests
-$PY -m coverage report

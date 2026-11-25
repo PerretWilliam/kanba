@@ -15,14 +15,13 @@ struct MoveTarget: Identifiable {
         if selected != oldValue { filter = ViewFilter() }   // a filter belongs to the tab it was set on
         UserDefaults.standard.set(selected.uuidString, forKey: "selectedBoard"); save()
     } }
-    // Screen state, never saved. The MCP set_filter tool hands one over through filter.json (read once, then deleted).
+    // Screen state, never saved. The MCP set_filter tool sets it directly.
     @Published var filter = ViewFilter()
 
     @Published var toast: Toast?
-    @Published var proposal: Proposal?     // pending changes from an AI client (proposal.json)
+    @Published var proposal: Proposal?     // pending changes from an AI client (MCP), waiting for the user
     @Published var review: [Change] = []   // its diff against the base the AI started from
     private var toastTask: Task<Void, Never>?
-    private var lastProposalData: Data?
 
     /// Short message at the bottom of the window. `actor` nil = the user, else the AI client's name.
     func notify(_ text: String, actor: String? = nil) {
@@ -36,20 +35,16 @@ struct MoveTarget: Identifiable {
     private func plural(_ n: Int, _ w: String) -> String { "\(n) \(w)\(n > 1 ? "s" : "")" }
 
     private struct Saved: Codable { var boards: [Board]; var selected: UUID }
-    /// Where boards.json lives. KANBA_DATA overrides it (experiments, tests); else the folder chosen in the app
-    /// (remembered in folder.txt next to the default folder, so the MCP server finds it too); else the default folder.
+    /// Where boards.json lives. KANBA_DATA overrides it (experiments, tests); else the folder chosen in the app; else the default folder.
     private static let defaultDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Kanban")
-    static var pointer = defaultDir.appendingPathComponent("folder.txt")   // tests point it at a temp file
+    private static let folderKey = "dataFolder"
     private(set) var dir: URL = {
-        let chosen = (try? String(contentsOf: Store.pointer, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let d = ProcessInfo.processInfo.environment["KANBA_DATA"].map { URL(fileURLWithPath: $0) }
-            ?? chosen.flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) } ?? Store.defaultDir
+        let chosen = UserDefaults.standard.string(forKey: Store.folderKey).flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
+        let d = ProcessInfo.processInfo.environment["KANBA_DATA"].map { URL(fileURLWithPath: $0) } ?? chosen ?? Store.defaultDir
         try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
         return d
     }()
     private var url: URL { dir.appendingPathComponent("boards.json") }
-    private var proposalURL: URL { dir.appendingPathComponent("proposal.json") }
-    private var filterURL: URL { dir.appendingPathComponent("filter.json") }
 
     init() {
         if let s = try? JSONDecoder().decode(Saved.self, from: Data(contentsOf: url)) {   // may hold zero boards: welcome page
@@ -62,17 +57,7 @@ struct MoveTarget: Identifiable {
         if let id = UserDefaults.standard.string(forKey: "selectedBoard").flatMap(UUID.init), boards.contains(where: { $0.id == id }) { selected = id }
         if let f = boards.first, !boards.contains(where: { $0.id == selected }) { selected = f.id }
         save()  // file's "selected" may be stale (e.g. taken from UserDefaults above)
-        try? FileManager.default.removeItem(at: filterURL)   // a leftover from a previous run is not for this session
         watch()
-        loadProposal()
-    }
-
-    /// One-shot filter from an AI client: apply, then delete so nothing persists. Runs after reload(), so a tab switch sent
-    /// together with it (which resets the filter) does not undo it.
-    private func loadFilter() {
-        guard let d = try? Data(contentsOf: filterURL), let f = try? JSONDecoder().decode(ViewFilter.self, from: d) else { return }
-        try? FileManager.default.removeItem(at: filterURL)
-        withAnimation { filter = f }
     }
 
     private var fileSelected: UUID?      // "selected" as last seen in the file: an external change to it switches the tab
@@ -103,7 +88,7 @@ struct MoveTarget: Identifiable {
         let fd = open(path.path, O_EVTONLY)
         guard fd >= 0 else { return nil }
         let src = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: mask, queue: .main)
-        src.setEventHandler { [weak self] in self?.reload(); self?.loadFilter(); self?.loadProposal(); self?.armFile() }
+        src.setEventHandler { [weak self] in self?.reload(); self?.armFile() }
         src.setCancelHandler { Darwin.close(fd) }
         src.resume()
         return src
@@ -114,12 +99,11 @@ struct MoveTarget: Identifiable {
         guard folder.standardizedFileURL != dir.standardizedFileURL else { return }
         dir = folder
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        try? FileManager.default.createDirectory(at: Self.defaultDir, withIntermediateDirectories: true)
-        try? folder.path.write(to: Self.pointer, atomically: true, encoding: .utf8)
+        UserDefaults.standard.set(folder.path, forKey: Self.folderKey)
         let existing = FileManager.default.fileExists(atPath: url.path)
         lastData = nil
         if existing { reload() } else { save() }
-        watch(); loadFilter(); loadProposal()
+        watch()
         notify(existing ? "Dossier changé : tableaux chargés" : "Dossier changé : tableaux copiés")
     }
 
@@ -137,23 +121,16 @@ struct MoveTarget: Identifiable {
 
     // MARK: AI proposals
 
-    private func loadProposal() {
-        guard let d = try? Data(contentsOf: proposalURL) else {
-            if proposal != nil { proposal = nil; review = [] }
-            lastProposalData = nil; return
-        }
-        guard d != lastProposalData, let p = try? JSONDecoder().decode(Proposal.self, from: d) else { return }
-        lastProposalData = d
+    /// An AI client's new state of the boards (MCP). The diff against the boards as they were when it started is what the user reviews.
+    func propose(actor: String, boards new: [Board]) {
+        let p = Proposal(actor: actor, base: proposal?.base ?? boards, boards: new)
         let changes = p.changes
         if changes.isEmpty { finishProposal(); return }
         withAnimation { proposal = p; review = changes }
-        notify("\(Toast.actorName(p.actor)) propose \(plural(changes.count, "modification"))", actor: p.actor)
+        notify("\(Toast.actorName(actor)) propose \(plural(changes.count, "modification"))", actor: actor)
     }
 
-    private func finishProposal() {
-        try? FileManager.default.removeItem(at: proposalURL)
-        lastProposalData = nil; proposal = nil; review = []
-    }
+    private func finishProposal() { proposal = nil; review = [] }
 
     /// Applies the ticked changes to the live boards; the others are dropped.
     func accept(_ ids: Set<UUID>) {

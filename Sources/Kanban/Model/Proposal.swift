@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Changes an AI client wants to make, written to proposal.json by the MCP server instead of touching boards.json.
+/// Changes an AI client wants to make, sent by the MCP server (Store.propose) instead of touching the boards.
 /// `base` is what the boards looked like when the first change was proposed, `boards` the proposed result.
 struct Proposal: Codable {
     var actor: String

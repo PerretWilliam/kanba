@@ -1,6 +1,0 @@
-[run]
-include = tools/kanba_mcp.py
-
-[report]
-fail_under = 100
-show_missing = True

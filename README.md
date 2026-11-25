@@ -16,7 +16,7 @@
 - **Phases**: split a board into sub-boards (e.g. the phases of a project), each with its own columns and cards.
 - **Import** a board from JSON; **export** it as JSON, CSV (opens in Excel) or Markdown.
 - **Plain JSON storage** in `~/Library/Application Support/Kanban/boards.json`; the app reloads it live, so manual edits and scripts just work.
-- **AI-ready via MCP**: a small MCP server (official Python SDK) lets Claude (or any MCP client) read and edit your boards.
+- **AI-ready via MCP**: Kanba runs a local MCP server, so Claude (or any MCP client) can read your boards and propose changes.
 - **Review before apply**: AI edits are never written directly. They arrive as a git-diff-like proposal that you accept all at once or change by change.
 - Toasts tell you what happened, with the logo of whoever did it (you or the AI).
 
@@ -38,22 +38,21 @@ open Kanba.app
 ## Use it with an AI (MCP)
 
 ```bash
-claude mcp add --scope user kanban -- uv run --script "$PWD/tools/kanba_mcp.py"
+npx -y add-mcp http://localhost:47821/mcp -g
 ```
 
-[`uv`](https://docs.astral.sh/uv/) installs the `mcp` dependency on first run (declared in the script's header). Without `uv`: `pip install "mcp>=2,<3"` and use `python3` instead of `uv run --script`.
+(or, for Claude Code only: `claude mcp add --scope user --transport http kanban http://localhost:47821/mcp`). The server lives inside the app, on this machine only (`localhost`): Kanba must be running.
 
 Then ask your assistant things like *"add a high-priority card about the release to my board"*. The change appears in Kanba as **N to review**; open it, tick what you want, and apply.
 
-Available tools: `get_boards`, `add_card`, `update_card`, `delete_card`, `clear_last_column`, `add_column`, `update_column`, `delete_column`, `add_board`, `update_board`, `select_board`, `delete_board`, `export_board`, `import_board`.
+Available tools: `get_boards`, `add_card`, `update_card`, `reorder_cards`, `delete_card`, `clear_last_column`, `add_column`, `update_column`, `delete_column`, `add_board`, `update_board`, `select_board`, `set_filter`, `delete_board`, `export_board`, `import_board`.
 
-How it works: tools write a `proposal.json` (the base state plus the proposed state) next to `boards.json`. The app diffs the two by entity id, so edits you make in the meantime are preserved. Only `select_board` is applied immediately.
+How it works: tools build a proposal (the base state plus the proposed state) in memory. The app diffs the two by entity id, so edits you make in the meantime are preserved; click a change to see it in detail. Only `select_board` and `set_filter` (what is on screen) are applied immediately.
 
 ## Project layout
 
 ```
 Sources/Kanban/   SwiftUI app (Model, Views, Components, Support)
-tools/kanba_mcp.py      MCP server (Python, official `mcp` SDK)
 tools/make-icon.swift  regenerates Icon.icns
 build.sh          builds Kanba.app
 ```
@@ -70,6 +69,6 @@ Issues and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Releases & tests
 
-Download `Kanba-X.Y.Z.zip` from the [Releases](https://github.com/PerretWilliam/kanba/releases) page (ad-hoc signed: right-click → Open the first time). `kanba-mcp.py` is the MCP server. See [CONTRIBUTING.md](CONTRIBUTING.md) for `just test` / `just cover` (100% line coverage of the logic layer and the MCP server).
+Download `Kanba-X.Y.Z.zip` from the [Releases](https://github.com/PerretWilliam/kanba/releases) page (ad-hoc signed: right-click → Open the first time). See [CONTRIBUTING.md](CONTRIBUTING.md) for `just test` / `just cover` (100% line coverage of the logic layer, MCP server included).
 
 AI logos are from [Simple Icons](https://simpleicons.org) (CC0); the marks belong to their owners and only identify the AI assigned to a card.

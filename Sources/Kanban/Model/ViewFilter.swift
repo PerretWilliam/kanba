@@ -1,6 +1,6 @@
 import Foundation
 
-/// What the board view shows: priority / tag / agent / text. UI state saved in boards.json (`filter`) so an AI client can set it
+/// What the board view shows: priority / tag / agent / text. screen state, never saved: an AI client can set it
 /// (MCP set_filter) and the user sees the result. Reset whenever the tab changes.
 struct ViewFilter: Codable, Equatable {
     var priority: Priority?

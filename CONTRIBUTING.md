@@ -16,13 +16,13 @@ Requires macOS 26+ and Swift 6 (the code builds in Swift 5 language mode).
 
 ## Guidelines
 
-- Keep it simple: prefer SwiftUI/stdlib features over new dependencies. The MCP server's only dependency is the official `mcp` SDK.
+- Keep it simple: prefer SwiftUI/stdlib features over new dependencies.
 - Match the existing style (compact, no needless abstractions).
 - The on-disk format is documented in [CLAUDE.md](CLAUDE.md). Don't break existing `boards.json` files.
-- AI-driven changes must keep going through `proposal.json` — never write `boards.json` from the MCP server (except `select_board`).
-- Add tests. `just cover` must pass: 100% line coverage of the logic layer (`Sources/Kanban/Model`, `Support/BoardFile.swift`) and of `tools/kanba_mcp.py` (needs `pip install coverage "mcp>=2,<3"`). SwiftUI views are excluded: keep logic out of them so it can be tested.
+- AI-driven changes must keep going through a proposal (`Store.propose`) — MCP tools never write the boards directly (only `select_board` and `set_filter`, which are screen state).
+- Add tests. `just cover` must pass: 100% line coverage of the logic layer (`Sources/Kanban/Model`, `Support/BoardFile.swift`). SwiftUI views are excluded: keep logic out of them so it can be tested.
 - AI logos come from [Simple Icons](https://simpleicons.org) (CC0) via `just logos`; never hand-draw a brand logo.
-- Test your change by running the app. For the MCP server, run `uv run --script tools/kanba_mcp.py` (or `npx @modelcontextprotocol/inspector uv run --script tools/kanba_mcp.py`) and check the proposal appears in the app. Set `KANBA_DATA=/some/empty/folder` (for both the app and the MCP server) to experiment without touching your real boards.
+- Test your change by running the app. For the MCP server, run the app and point `npx @modelcontextprotocol/inspector` (or `curl -X POST -H 'Content-Type: application/json' http://localhost:47821/mcp -d '{...}'`) at `http://localhost:47821/mcp`; the proposal appears in the app. Set `KANBA_DATA=/some/empty/folder` (and `KANBA_PORT=47822` for a second instance) to experiment without touching your real boards.
 
 ## Pull requests
 
@@ -32,7 +32,7 @@ Requires macOS 26+ and Swift 6 (the code builds in Swift 5 language mode).
 
 ## Releases
 
-Maintainers: `just release 1.2.0` (from a clean `main`) runs the gates, tags `v1.2.0` and pushes it. The Release workflow rebuilds, tests, zips `Kanba.app` (ad-hoc signed, not notarized: right-click → Open the first time), and publishes a GitHub Release with generated notes, `kanba-mcp.py` and `SHA256SUMS`.
+Maintainers: `just release 1.2.0` (from a clean `main`) runs the gates, tags `v1.2.0` and pushes it. The Release workflow rebuilds, tests, zips `Kanba.app` (ad-hoc signed, not notarized: right-click → Open the first time), and publishes a GitHub Release with generated notes, and `SHA256SUMS`.
 
 ## Reporting bugs
 
