@@ -1,7 +1,10 @@
-import importlib.util, io, json, os, sys, tempfile, unittest
+import asyncio, importlib.util, io, json, os, sys, tempfile, unittest
+
+from mcp import Client
+from mcp.types import Implementation
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-spec = importlib.util.spec_from_file_location("kanba_mcp", os.path.join(HERE, "..", "tools", "mcp.py"))
+spec = importlib.util.spec_from_file_location("kanba_mcp", os.path.join(HERE, "..", "tools", "kanba_mcp.py"))
 m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
 
 COLS = [{"id": "todo", "name": "À faire", "color": "gray"}, {"id": "doing", "name": "En cours", "color": "blue"}, {"id": "done", "name": "Terminé", "color": "green"}]
@@ -27,6 +30,18 @@ class Base(unittest.TestCase):
     def cards(self, i=0): return [c["title"] for c in self.b(i)["cards"]]
 
 class Helpers(Base):
+    def test_data_dir(self):
+        old = m.DEFAULT_DIR, os.environ.pop("KANBA_DATA", None)
+        try:
+            m.DEFAULT_DIR = self.dir
+            self.assertEqual(m.data_dir(), self.dir)   # no folder.txt: default
+            open(os.path.join(self.dir, "folder.txt"), "w").write("/chosen\n")
+            self.assertEqual(m.data_dir(), "/chosen")   # chosen in the app
+            os.environ["KANBA_DATA"] = "/env"
+            self.assertEqual(m.data_dir(), "/env")      # env wins
+        finally:
+            m.DEFAULT_DIR = old[0]; os.environ.pop("KANBA_DATA", None)
+            if old[1]: os.environ["KANBA_DATA"] = old[1]
     def test_same_and_lookups(self):
         d = m.load()
         self.assertTrue(m.same("MAIN", "x", "main"))
@@ -187,29 +202,40 @@ class Export(Base):
         with self.assertRaises(ValueError): m.import_board({"path": out})
 
 class Protocol(Base):
-    def rpc(self, method, **params): return m.handle({"method": method, "params": params})
+    def call(self, calls, name="gemini-cli"):  # [(tool, args)] through the real MCP protocol (in-memory client); returns the tools list and each result
+        async def go():
+            async with Client(m.server, client_info=Implementation(name=name, version="1")) as c:
+                return (await c.list_tools()).tools, [await c.call_tool(t, a) for t, a in calls]
+        return asyncio.run(go())
 
-    def test_handle(self):
-        r = self.rpc("initialize", clientInfo={"name": "gemini-cli"}, protocolVersion="2025-01-01")
-        self.assertEqual((m.ACTOR, r["protocolVersion"], r["serverInfo"]["version"]), ("gemini-cli", "2025-01-01", "3"))
-        self.assertEqual(self.rpc("initialize")["protocolVersion"], "2024-11-05"); self.assertEqual(m.ACTOR, "claude")
-        names = [t["name"] for t in self.rpc("tools/list")["tools"]]
-        self.assertIn("update_card", names); self.assertEqual(len(names), len(m.TOOLS))
-        ok = self.rpc("tools/call", name="get_boards", arguments={"agent": "opus"})
-        self.assertNotIn("isError", ok); self.assertNotIn("Change proposed", ok["content"][0]["text"])
-        done = self.rpc("tools/call", name="update_board", arguments={"board": "Main", "name": "N"})
-        self.assertIn("Change proposed", done["content"][0]["text"]); self.assertTrue(done["content"][0]["text"].startswith("ok"))
-        self.assertEqual(self.rpc("tools/call", name="select_board", arguments={"board": "N"})["content"][0]["text"], "ok")
-        self.assertEqual(self.rpc("tools/call", name="clear_last_column")["content"][0]["text"], "1 cards deleted\n[Change proposed: the user must approve it in the Kanba app before it is applied.]")
-        err = self.rpc("tools/call", name="update_card", arguments={"card_id": "zzz"})
-        self.assertTrue(err["isError"]); self.assertIn("card not found", err["content"][0]["text"])
-        self.assertEqual(self.rpc("ping"), {})
-        with self.assertRaises(KeyError): self.rpc("nope")
+    def test_protocol(self):
+        tools, (ok, done, sel, clear, err) = self.call([
+            ("get_boards", {"agent": "opus"}), ("update_board", {"board": "Main", "name": "N"}), ("select_board", {"board": "N"}),
+            ("clear_last_column", {}), ("update_card", {"card_id": "zzz"})])
+        self.assertEqual(len(tools), 16); self.assertIn("update_card", [t.name for t in tools])
+        self.assertEqual(m.ACTOR, "gemini-cli")
+        text = lambda r: r.content[0].text
+        self.assertFalse(ok.is_error); self.assertNotIn("Change proposed", text(ok))
+        self.assertIn("Change proposed", text(done)); self.assertTrue(text(done).startswith("ok"))
+        self.assertEqual(text(sel), "ok")
+        self.assertEqual(text(clear), "1 cards deleted\n[Change proposed: the user must approve it in the Kanba app before it is applied.]")
+        self.assertTrue(err.is_error); self.assertIn("card not found", text(err))
 
-    def test_main_loop(self):
-        lines = [{"jsonrpc": "2.0", "method": "notifications/initialized"}, {"jsonrpc": "2.0", "id": 1, "method": "ping"}, {"jsonrpc": "2.0", "id": 2, "method": "bogus"}]
-        out = io.StringIO(); m.main(io.StringIO("\n".join(json.dumps(x) for x in lines) + "\n"), out)
-        r = [json.loads(x) for x in out.getvalue().splitlines()]
-        self.assertEqual((len(r), r[0]["result"], r[1]["error"]["code"]), (2, {}, -32601))
+    def test_every_tool_is_wired(self):  # each typed wrapper reaches its logic function with the right arguments
+        out = os.path.join(self.dir, "out.json")
+        calls = [("add_card", {"title": "t", "agents": ["me", {"name": "claude", "effort": "high"}], "priority": "high", "position": 1}),
+                 ("update_card", {"card_id": "c1", "title": "uno", "to_board": "Other"}), ("reorder_cards", {"column": "todo", "card_ids": ["c2"]}),
+                 ("delete_card", {"card_id": "c2"}), ("add_column", {"name": "Z2", "color": "red"}), ("update_column", {"column": "Z2", "name": "Z3"}),
+                 ("delete_column", {"column": "Z3"}), ("add_board", {"name": "New", "columns": ["a", "b"], "cards": [{"title": "x", "column": "b"}]}),
+                 ("export_board", {"path": out, "board": "New", "format": "markdown"}), ("set_filter", {"tag": "x"}),
+                 ("clear_last_column", {"board": "Main"}), ("delete_board", {"board": "Other"})]
+        _, res = self.call(calls)
+        self.assertEqual([r.is_error for r in res], [False] * len(calls), [r.content[0].text for r in res if r.is_error])
+        self.assertIn("# New", open(out).read())
+        _, res = self.call([("export_board", {"path": out, "board": "New", "format": "json", "overwrite": True}), ("import_board", {"path": out})])
+        self.assertFalse(any(r.is_error for r in res))
+        self.assertEqual(m.ACTOR, "gemini-cli")
+        self.call([("get_boards", {})], name="")  # an unnamed client counts as claude
+        self.assertEqual(m.ACTOR, "claude")
 
 if __name__ == "__main__": unittest.main()

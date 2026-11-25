@@ -16,7 +16,7 @@
 - **Phases**: split a board into sub-boards (e.g. the phases of a project), each with its own columns and cards.
 - **Import** a board from JSON; **export** it as JSON, CSV (opens in Excel) or Markdown.
 - **Plain JSON storage** in `~/Library/Application Support/Kanban/boards.json`; the app reloads it live, so manual edits and scripts just work.
-- **AI-ready via MCP**: a tiny stdlib-only Python server lets Claude (or any MCP client) read and edit your boards.
+- **AI-ready via MCP**: a small MCP server (official Python SDK) lets Claude (or any MCP client) read and edit your boards.
 - **Review before apply**: AI edits are never written directly. They arrive as a git-diff-like proposal that you accept all at once or change by change.
 - Toasts tell you what happened, with the logo of whoever did it (you or the AI).
 
@@ -38,8 +38,10 @@ open Kanba.app
 ## Use it with an AI (MCP)
 
 ```bash
-claude mcp add --scope user kanban -- python3 "$PWD/tools/mcp.py"
+claude mcp add --scope user kanban -- uv run --script "$PWD/tools/kanba_mcp.py"
 ```
+
+[`uv`](https://docs.astral.sh/uv/) installs the `mcp` dependency on first run (declared in the script's header). Without `uv`: `pip install "mcp>=2,<3"` and use `python3` instead of `uv run --script`.
 
 Then ask your assistant things like *"add a high-priority card about the release to my board"*. The change appears in Kanba as **N to review**; open it, tick what you want, and apply.
 
@@ -51,7 +53,7 @@ How it works: tools write a `proposal.json` (the base state plus the proposed st
 
 ```
 Sources/Kanban/   SwiftUI app (Model, Views, Components, Support)
-tools/mcp.py      MCP server (Python 3, stdlib only)
+tools/kanba_mcp.py      MCP server (Python, official `mcp` SDK)
 tools/make-icon.swift  regenerates Icon.icns
 build.sh          builds Kanba.app
 ```

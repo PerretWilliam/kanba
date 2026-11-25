@@ -23,6 +23,14 @@ extension BoardIO {
         return b
     }
 
+    /// Asks for the folder that holds boards.json.
+    static func chooseFolder(current: URL) -> URL? {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
+        panel.directoryURL = current; panel.prompt = "Choisir"
+        return panel.runModal() == .OK ? panel.url : nil
+    }
+
     private static func alert(_ title: String, _ text: String) {
         let a = NSAlert(); a.messageText = title; a.informativeText = text; a.runModal()
     }

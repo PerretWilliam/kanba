@@ -22,7 +22,7 @@ jobs:
         run: |
           V="${GITHUB_REF_NAME#v}"
           ditto -c -k --keepParent Kanba.app "Kanba-$V.zip"
-          cp tools/mcp.py kanba-mcp.py
+          cp tools/kanba_mcp.py kanba-mcp.py
           shasum -a 256 "Kanba-$V.zip" kanba-mcp.py > SHA256SUMS
       - name: Publish
         env:

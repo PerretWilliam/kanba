@@ -1,8 +1,23 @@
-#!/usr/bin/env python3
-"""MCP server (stdio, stdlib only) for the Kanban app. Writes proposal.json; the app shows a diff the user validates."""
-import json, os, sys, uuid, datetime as dt
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["mcp>=2,<3"]
+# ///
+"""MCP server (stdio, official Python SDK) for the Kanban app. Writes proposal.json; the app shows a diff the user validates."""
+import json, os, uuid, datetime as dt
+from typing import Annotated, Literal, NotRequired, TypedDict
+from pydantic import Field
+from mcp.server.mcpserver import MCPServer, Context
+from mcp.server.mcpserver.exceptions import ToolError
 
-PATH = os.path.join(os.path.expanduser(os.environ.get("KANBA_DATA", "~/Library/Application Support/Kanban")), "boards.json")
+DEFAULT_DIR = os.path.expanduser("~/Library/Application Support/Kanban")
+
+def data_dir():  # KANBA_DATA, else the folder chosen in the app (folder.txt), else the default one
+    try: chosen = open(os.path.join(DEFAULT_DIR, "folder.txt")).read().strip()
+    except OSError: chosen = ""
+    return os.environ.get("KANBA_DATA") or chosen or DEFAULT_DIR
+
+PATH = os.path.join(data_dir(), "boards.json")
 EPOCH = dt.datetime(2001, 1, 1, tzinfo=dt.timezone.utc)  # Swift Date reference
 COLORS = "gray blue green orange purple pink teal red".split()
 PRIO = {"low": 0, "medium": 1, "high": 2}
@@ -236,62 +251,126 @@ def import_board(a):
     b = {"id": str(uuid.uuid4()).upper(), "name": f["name"], "columns": f["columns"], "cards": cards}
     d["boards"].append(b); d["selected"] = b["id"]; save(d); return {"id": b["id"]}
 
-S = lambda **p: {"type": "object", "properties": p}
-STR, ARR, BOOL = {"type": "string"}, {"type": "array", "items": {"type": "string"}}, {"type": "boolean"}
-BOARD = {"type": "string", "description": "board name or id (default: the tab on screen)"}
-COLOR = {"enum": COLORS}
-AGENTS = {"type": "array", "description": "Who is assigned: any number of agents, each {name, model?, effort?}. name = an AI (claude, codex, chatgpt, gemini, copilot, cursor, windsurf, mistral, deepseek, grok, perplexity, llama, qwen, kimi, zed, cline, aider, opencode, goose, or any other name) or 'me' for the user. model = free text (e.g. 'Opus 5.5', 'GPT-6.2 Sol', 'Gemini 4 Carbon'). effort = minimal | low | medium | high | xhigh | max (Claude and OpenAI: low..max; Gemini: minimal..xhigh; free text accepted). Replaces the whole list; [] clears it. A plain string means just the name.",
-          "items": {"anyOf": [STR, S(name=STR, model=STR, effort=STR)]}}
-CARD = dict(position={"type": "integer", "description": "1-based rank within its column; 1 = do first. Default: last."}, title=STR, notes=STR, priority={"enum": list(PRIO)}, due={"type": "string", "description": "ISO date, '' to clear"}, tags=ARR, agents=AGENTS,
-            column={"type": "string", "description": "column name or id"})
-def T(fn, desc, req=(), **props): return (fn, desc, {**S(**props), "required": list(req)})
-TOOLS = {
-    "get_boards": T(get_boards, "List boards (tabs, including closed ones: 'closed': true) with columns and cards (notes are Markdown; agents = assignees). The last column of a board is its 'done' column. Optional search/filter like the app's. Card order = priority order.",
-                    board=BOARD, query=STR, priority={"enum": list(PRIO)}, tag=STR, agent={"type": "string", "description": "only cards assigned to this agent (name or model, e.g. 'claude', 'me', 'opus')"}),
-    "add_card": T(add_card, "Add a card (default: first column of the tab on screen). notes accept Markdown (headings, lists, - [ ] tasks, **bold**, `code`, code blocks, links), rendered in the app's card panel.", ["title"], board=BOARD, **CARD),
-    "reorder_cards": T(reorder_cards, "Set the priority order of cards in a column: card_ids go first, in that order (position 1 = do first); other cards follow. Cards are listed by get_boards in this order.", ["column", "card_ids"], board=BOARD, column=STR, card_ids=ARR),
-    "update_card": T(update_card, "Edit a card; 'column' moves it within its board, 'to_board' moves it to another board (or phase).", ["card_id"], card_id=STR, to_board=BOARD, **CARD),
-    "delete_card": T(delete_card, "Delete a card.", ["card_id"], card_id=STR),
-    "clear_last_column": T(clear_last_column, "Delete every card of the board's last ('done') column — the app's trash button.", board=BOARD),
-    "add_column": T(add_column, "Add a column at the end.", ["name"], board=BOARD, name=STR, color=COLOR),
-    "update_column": T(update_column, "Rename and/or recolor a column.", ["column"], board=BOARD, column=STR, name=STR, color=COLOR),
-    "delete_column": T(delete_column, "Delete a column; its cards move to the left neighbour. Not the last column.", ["column"], board=BOARD, column=STR),
-    "add_board": T(add_board, "Create a board (tab) and switch to it. With parent (a top-level board's id or name) it becomes a phase (sub-board) of that board, with the parent's columns by default. Optional columns (names) and starter cards (same fields as add_card) — use it to recreate any template.",
-                   ["name"], name=STR, parent=BOARD, columns=ARR, cards={"type": "array", "items": S(**CARD)}),
-    "update_board": T(update_board, "Rename a board and/or close it (closed=true: hides the tab, nothing is deleted, it stays in the app's Projets menu) or reopen it (closed=false).", ["board"], board=BOARD, name=STR, closed=BOOL),
-    "select_board": T(select_board, "Switch the app to this tab (reopens it if it was closed).", ["board"], board=BOARD),
-    "set_filter": T(set_filter, "Filter what the app shows on the current tab, like the user's search field and filter button: any of priority, tag, agent (e.g. 'claude', 'me', or part of a model name) and query (text in title, notes, tags, agents). Replaces the current filter; call it with no argument to clear it. Applied immediately and only on screen (nothing is saved): it is dropped when the tab changes or the app restarts. get_boards (with the same fields) only reads, it does not change the screen.", [], priority={"enum": list(PRIO)}, tag=STR, agent=STR, query=STR),
-    "delete_board": T(delete_board, "Close a board (tab) or phase and delete its cards (a board's phases go with it). Deleting the last one shows the app's welcome page.", ["board"], board=BOARD),
-    "export_board": T(export_board, "Export a board to a file: json (app's share format, re-importable, default), csv (one row per card, opens in Excel) or markdown.", ["path"], board=BOARD, path=STR, format={"type": "string", "enum": ["json", "csv", "markdown"]}, overwrite=BOOL),
-    "import_board": T(import_board, "Import a board from a JSON file exported by the app or export_board, as a new tab.", ["path"], path=STR),
-}
+# ---- MCP layer: typed signatures give the tools' JSON schemas; the logic above takes plain dicts ----
+server = MCPServer("kanban", version="4")
 
-def handle(m):
-    meth, p = m.get("method"), m.get("params", {})
+Color = Literal["gray", "blue", "green", "orange", "purple", "pink", "teal", "red"]
+Priority = Literal["low", "medium", "high"]
+Board = Annotated[str | None, Field(description="board name or id (default: the tab on screen)")]
+Column = Annotated[str | None, Field(description="column name or id")]
+Position = Annotated[int | None, Field(description="1-based rank within its column; 1 = do first. Default: last.")]
+Due = Annotated[str | None, Field(description="ISO date, '' to clear")]
+
+class AgentSpec(TypedDict):
+    name: str
+    model: NotRequired[str]
+    effort: NotRequired[str]
+
+Agents = Annotated[list[str | AgentSpec] | None, Field(description=(
+    "Who is assigned: any number of agents, each {name, model?, effort?}. name = an AI (claude, codex, chatgpt, gemini, copilot, cursor, windsurf, mistral, deepseek, grok, "
+    "perplexity, llama, qwen, kimi, zed, cline, aider, opencode, goose, or any other name) or 'me' for the user. model = free text (e.g. 'Opus 5.5', 'GPT-6.2 Sol', 'Gemini 4 Carbon'). "
+    "effort = minimal | low | medium | high | xhigh | max (Claude and OpenAI: low..max; Gemini: minimal..xhigh; free text accepted). Replaces the whole list; [] clears it. A plain string means just the name."))]
+
+class CardSpec(TypedDict):  # starter card of add_board: same fields as add_card
+    title: str
+    notes: NotRequired[str]
+    priority: NotRequired[Priority]
+    due: NotRequired[str]
+    tags: NotRequired[list[str]]
+    agents: NotRequired[list[str | AgentSpec]]
+    column: NotRequired[str]
+    position: NotRequired[int]
+
+def run(fn, ctx, args):  # the client's name is who the app shows as the author of the proposal
     global ACTOR, proposed
-    if meth == "initialize":
-        ACTOR = (p.get("clientInfo") or {}).get("name") or "claude"
-        return {"protocolVersion": p.get("protocolVersion", "2024-11-05"), "capabilities": {"tools": {}}, "serverInfo": {"name": "kanban", "version": "3"}}
-    if meth == "tools/list":
-        return {"tools": [{"name": n, "description": t[1], "inputSchema": t[2]} for n, t in TOOLS.items()]}
-    if meth == "tools/call":
-        try:
-            proposed = False
-            out = TOOLS[p["name"]][0](p.get("arguments") or {})
-            text = out if isinstance(out, str) else json.dumps(out, ensure_ascii=False)
-            if proposed: text += "\n[Change proposed: the user must approve it in the Kanba app before it is applied.]"
-            return {"content": [{"type": "text", "text": text}]}
-        except Exception as e:
-            return {"isError": True, "content": [{"type": "text", "text": f"{type(e).__name__}: {e}"}]}
-    if meth == "ping": return {}
-    raise KeyError(meth)
+    info = getattr(ctx.session.client_params, "client_info", None)
+    ACTOR = (info and info.name) or "claude"; proposed = False
+    try: out = fn({k: v for k, v in args.items() if k != "ctx" and v is not None})
+    except Exception as e: raise ToolError(f"{type(e).__name__}: {e}") from e   # the SDK hides other exceptions: the client needs the reason to correct itself
+    text = out if isinstance(out, str) else json.dumps(out, ensure_ascii=False)
+    return text + "\n[Change proposed: the user must approve it in the Kanba app before it is applied.]" if proposed else text
 
-def main(stdin=sys.stdin, stdout=sys.stdout):
-    for line in stdin:
-        m = json.loads(line)
-        if "id" not in m: continue  # notification
-        try: r = {"result": handle(m)}
-        except KeyError: r = {"error": {"code": -32601, "message": "method not found"}}
-        print(json.dumps({"jsonrpc": "2.0", "id": m["id"], **r}), flush=True, file=stdout)
+@server.tool(name="get_boards")
+def _get_boards(ctx: Context, board: Board = None, query: str | None = None, priority: Priority | None = None, tag: str | None = None,
+                agent: Annotated[str | None, Field(description="only cards assigned to this agent (name or model, e.g. 'claude', 'me', 'opus')")] = None) -> str:
+    """List boards (tabs, including closed ones: 'closed': true) with columns and cards (notes are Markdown; agents = assignees). The last column of a board is its 'done' column. Optional search/filter like the app's. Card order = priority order."""
+    return run(get_boards, ctx, locals())
 
-if __name__ == "__main__": main()  # pragma: no cover
+@server.tool(name="add_card")
+def _add_card(ctx: Context, title: str, board: Board = None, position: Position = None, notes: str | None = None, priority: Priority | None = None,
+              due: Due = None, tags: list[str] | None = None, agents: Agents = None, column: Column = None) -> str:
+    """Add a card (default: first column of the tab on screen). notes accept Markdown (headings, lists, - [ ] tasks, **bold**, `code`, code blocks, links), rendered in the app's card panel."""
+    return run(add_card, ctx, locals())
+
+@server.tool(name="reorder_cards")
+def _reorder_cards(ctx: Context, column: str, card_ids: list[str], board: Board = None) -> str:
+    """Set the priority order of cards in a column: card_ids go first, in that order (position 1 = do first); other cards follow. Cards are listed by get_boards in this order."""
+    return run(reorder_cards, ctx, locals())
+
+@server.tool(name="update_card")
+def _update_card(ctx: Context, card_id: str, to_board: Board = None, position: Position = None, title: str | None = None, notes: str | None = None,
+                 priority: Priority | None = None, due: Due = None, tags: list[str] | None = None, agents: Agents = None, column: Column = None) -> str:
+    """Edit a card; 'column' moves it within its board, 'to_board' moves it to another board (or phase)."""
+    return run(update_card, ctx, locals())
+
+@server.tool(name="delete_card")
+def _delete_card(ctx: Context, card_id: str) -> str:
+    """Delete a card."""
+    return run(delete_card, ctx, locals())
+
+@server.tool(name="clear_last_column")
+def _clear_last_column(ctx: Context, board: Board = None) -> str:
+    """Delete every card of the board's last ('done') column — the app's trash button."""
+    return run(clear_last_column, ctx, locals())
+
+@server.tool(name="add_column")
+def _add_column(ctx: Context, name: str, board: Board = None, color: Color | None = None) -> str:
+    """Add a column at the end."""
+    return run(add_column, ctx, locals())
+
+@server.tool(name="update_column")
+def _update_column(ctx: Context, column: str, board: Board = None, name: str | None = None, color: Color | None = None) -> str:
+    """Rename and/or recolor a column."""
+    return run(update_column, ctx, locals())
+
+@server.tool(name="delete_column")
+def _delete_column(ctx: Context, column: str, board: Board = None) -> str:
+    """Delete a column; its cards move to the left neighbour. Not the last column."""
+    return run(delete_column, ctx, locals())
+
+@server.tool(name="add_board")
+def _add_board(ctx: Context, name: str, parent: Board = None, columns: list[str] | None = None, cards: list[CardSpec] | None = None) -> str:
+    """Create a board (tab) and switch to it. With parent (a top-level board's id or name) it becomes a phase (sub-board) of that board, with the parent's columns by default. Optional columns (names) and starter cards (same fields as add_card) — use it to recreate any template."""
+    return run(add_board, ctx, locals())
+
+@server.tool(name="update_board")
+def _update_board(ctx: Context, board: str, name: str | None = None, closed: bool | None = None) -> str:
+    """Rename a board and/or close it (closed=true: hides the tab, nothing is deleted, it stays in the app's Projets menu) or reopen it (closed=false)."""
+    return run(update_board, ctx, locals())
+
+@server.tool(name="select_board")
+def _select_board(ctx: Context, board: str) -> str:
+    """Switch the app to this tab (reopens it if it was closed)."""
+    return run(select_board, ctx, locals())
+
+@server.tool(name="set_filter")
+def _set_filter(ctx: Context, priority: Priority | None = None, tag: str | None = None, agent: str | None = None, query: str | None = None) -> str:
+    """Filter what the app shows on the current tab, like the user's search field and filter button: any of priority, tag, agent (e.g. 'claude', 'me', or part of a model name) and query (text in title, notes, tags, agents). Replaces the current filter; call it with no argument to clear it. Applied immediately and only on screen (nothing is saved): it is dropped when the tab changes or the app restarts. get_boards (with the same fields) only reads, it does not change the screen."""
+    return run(set_filter, ctx, locals())
+
+@server.tool(name="delete_board")
+def _delete_board(ctx: Context, board: str) -> str:
+    """Close a board (tab) or phase and delete its cards (a board's phases go with it). Deleting the last one shows the app's welcome page."""
+    return run(delete_board, ctx, locals())
+
+@server.tool(name="export_board")
+def _export_board(ctx: Context, path: str, board: Board = None, format: Literal["json", "csv", "markdown"] | None = None, overwrite: bool | None = None) -> str:
+    """Export a board to a file: json (app's share format, re-importable, default), csv (one row per card, opens in Excel) or markdown."""
+    return run(export_board, ctx, locals())
+
+@server.tool(name="import_board")
+def _import_board(ctx: Context, path: str) -> str:
+    """Import a board from a JSON file exported by the app or export_board, as a new tab."""
+    return run(import_board, ctx, locals())
+
+if __name__ == "__main__": server.run()  # pragma: no cover

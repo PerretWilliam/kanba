@@ -25,7 +25,7 @@ release version:
     #!/bin/sh
     set -e
     case "{{version}}" in [0-9]*.[0-9]*.[0-9]*) ;; *) echo "version must look like 1.2.3"; exit 1;; esac
-    [ "$(git branch --show-current)" = master ] || { echo "release from master"; exit 1; }
+    [ "$(git branch --show-current)" = main ] || { echo "release from main"; exit 1; }
     [ -z "$(git status --porcelain)" ] || { echo "working tree not clean"; exit 1; }
     git pull --ff-only
     just cover

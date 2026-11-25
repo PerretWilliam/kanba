@@ -1,5 +1,5 @@
 [run]
-include = tools/mcp.py
+include = tools/kanba_mcp.py
 
 [report]
 fail_under = 100

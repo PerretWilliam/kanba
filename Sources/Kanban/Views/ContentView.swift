@@ -192,6 +192,7 @@ struct ContentView: View {
                 }
                 Divider()
                 Button("Nouveau tableau…") { sheet = .new }
+                Button("Dossier des données…") { BoardIO.chooseFolder(current: store.dir).map(store.move(to:)) }
             } label: { bar("square.stack") }
                 .help("Tous les projets")
             let active = store.filter.hasChips

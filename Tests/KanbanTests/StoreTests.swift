@@ -355,4 +355,37 @@ import Foundation
         #expect(await eventually { s.proposal == nil })
         #expect(s.review.isEmpty)
     }
+
+    @Test func inPlaceEditAndAddedFileAreDetected() async throws {
+        let (s, dir) = try make(boards: [Board(name: "A")])
+        let url = dir.appendingPathComponent("boards.json")
+        let h = try FileHandle(forWritingTo: url)   // edited in place: the file's inode stays, the folder sees nothing
+        let edited = try String(contentsOf: url, encoding: .utf8).replacingOccurrences(of: "\"A\"", with: "\"B\"")
+        try h.truncate(atOffset: 0); try h.write(contentsOf: Data(edited.utf8)); try h.close()
+        #expect(await eventually { s.boards.first?.name == "B" })
+        try FileManager.default.removeItem(at: url)
+        let other = Board(name: "dropped in")   // a boards.json added to the folder is picked up
+        try JSONEncoder().encode(["boards": AnyEnc([other]), "selected": AnyEnc(other.id)]).write(to: url)
+        #expect(await eventually { s.boards.first?.name == "dropped in" })
+    }
+
+    @Test func movingTheDataFolder() throws {
+        Store.pointer = Self.tmp().appendingPathComponent("folder.txt")
+        let (s, old) = try make(boards: [Board(name: "A")])
+        s.move(to: old)   // same folder: nothing
+        #expect(s.toast == nil)
+        let empty = Self.tmp().appendingPathComponent("new")   // does not exist yet: gets a copy of the boards
+        s.move(to: empty)
+        #expect(s.dir == empty)
+        #expect(try saved(empty).boards.first?.name == "A")
+        #expect(try String(contentsOf: Store.pointer, encoding: .utf8) == empty.path)
+        s.edit { $0.name = "A2" }
+        #expect(try saved(empty).boards.first?.name == "A2")
+        #expect(try saved(old).boards.first?.name == "A")   // the old folder is left alone
+        let full = Self.tmp()   // already holds boards: they win
+        let b = Board(name: "existing")
+        try JSONEncoder().encode(["boards": AnyEnc([b]), "selected": AnyEnc(b.id)]).write(to: full.appendingPathComponent("boards.json"))
+        s.move(to: full)
+        #expect(s.boards.map(\.name) == ["existing"] && s.selected == b.id)
+    }
 }

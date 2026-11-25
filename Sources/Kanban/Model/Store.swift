@@ -36,10 +36,14 @@ struct MoveTarget: Identifiable {
     private func plural(_ n: Int, _ w: String) -> String { "\(n) \(w)\(n > 1 ? "s" : "")" }
 
     private struct Saved: Codable { var boards: [Board]; var selected: UUID }
-    private let dir: URL = {
-        // KANBA_DATA overrides the data folder (experiments, tests) without touching your real boards.
+    /// Where boards.json lives. KANBA_DATA overrides it (experiments, tests); else the folder chosen in the app
+    /// (remembered in folder.txt next to the default folder, so the MCP server finds it too); else the default folder.
+    private static let defaultDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Kanban")
+    static var pointer = defaultDir.appendingPathComponent("folder.txt")   // tests point it at a temp file
+    private(set) var dir: URL = {
+        let chosen = (try? String(contentsOf: Store.pointer, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines)
         let d = ProcessInfo.processInfo.environment["KANBA_DATA"].map { URL(fileURLWithPath: $0) }
-            ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Kanban")
+            ?? chosen.flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) } ?? Store.defaultDir
         try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
         return d
     }()
@@ -73,7 +77,8 @@ struct MoveTarget: Identifiable {
 
     private var fileSelected: UUID?      // "selected" as last seen in the file: an external change to it switches the tab
     private var lastData: Data?          // last bytes we wrote or loaded; lets us ignore our own file events
-    private var watcher: DispatchSourceFileSystemObject?
+    private var watcher: DispatchSourceFileSystemObject?       // the folder: a file added, removed or replaced
+    private var fileWatcher: DispatchSourceFileSystemObject?   // boards.json itself: edited in place
 
     private func save() {
         guard let d = try? JSONEncoder().encode(Saved(boards: boards, selected: selected)) else { return }
@@ -81,16 +86,41 @@ struct MoveTarget: Identifiable {
         try? d.write(to: url, options: .atomic)
     }
 
-    /// Live-reloads boards.json when another process (e.g. an AI agent) edits it.
-    /// Watches the directory, not the file: atomic writes replace the inode.
+    /// Live-reloads when another process (an AI agent, an editor, a sync tool) touches the data folder.
+    /// The folder is watched for added/replaced files (atomic writes swap the inode); boards.json is watched too for in-place edits.
     private func watch() {
-        let fd = open(dir.path, O_EVTONLY)
-        guard fd >= 0 else { return }
-        let src = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: .write, queue: .main)
-        src.setEventHandler { [weak self] in self?.reload(); self?.loadFilter(); self?.loadProposal() }
+        watcher?.cancel()
+        watcher = source(dir, .write)
+        armFile()
+    }
+
+    private func armFile() {
+        fileWatcher?.cancel()
+        fileWatcher = source(url, [.write, .extend])
+    }
+
+    private func source(_ path: URL, _ mask: DispatchSource.FileSystemEvent) -> DispatchSourceFileSystemObject? {
+        let fd = open(path.path, O_EVTONLY)
+        guard fd >= 0 else { return nil }
+        let src = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: mask, queue: .main)
+        src.setEventHandler { [weak self] in self?.reload(); self?.loadFilter(); self?.loadProposal(); self?.armFile() }
         src.setCancelHandler { Darwin.close(fd) }
         src.resume()
-        watcher = src
+        return src
+    }
+
+    /// Switches to another data folder. Boards already there (boards.json) are loaded; an empty folder gets the current boards.
+    func move(to folder: URL) {
+        guard folder.standardizedFileURL != dir.standardizedFileURL else { return }
+        dir = folder
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: Self.defaultDir, withIntermediateDirectories: true)
+        try? folder.path.write(to: Self.pointer, atomically: true, encoding: .utf8)
+        let existing = FileManager.default.fileExists(atPath: url.path)
+        lastData = nil
+        if existing { reload() } else { save() }
+        watch(); loadFilter(); loadProposal()
+        notify(existing ? "Dossier changé : tableaux chargés" : "Dossier changé : tableaux copiés")
     }
 
     private func reload() {
