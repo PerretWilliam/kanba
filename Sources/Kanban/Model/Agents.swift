@@ -14,7 +14,7 @@ enum Agents {
     // Order matters: first match wins ("codex" before "gpt").
     static let all: [AgentKind] = [
         .init(key: "me", label: "Moi", symbol: "person.fill", color: .green, match: ["me", "moi", "user", "utilisateur"]),
-        .init(key: "claude", label: "Claude", symbol: "sparkle", color: Color(red: 0.851, green: 0.467, blue: 0.341), logo: "claude", match: ["claude", "anthropic"],
+        .init(key: "claude", label: "Claude", symbol: "sparkle", color: Color(red: 0.851, green: 0.467, blue: 0.341), logo: "claude", match: ["claude", "anthropic", "local-agent", "cowork"],
               models: ["Fable 5.2", "Opus 5.5", "Sonnet 5.5", "Haiku 5.5"]),
         .init(key: "codex", label: "Codex", symbol: "terminal.fill", color: .indigo, logo: "openai", match: ["codex"], models: Agents.openAI),
         .init(key: "chatgpt", label: "ChatGPT", symbol: "bubbles.and.sparkles.fill", color: .mint, logo: "openai", match: ["chatgpt", "openai", "gpt"], models: Agents.openAI),

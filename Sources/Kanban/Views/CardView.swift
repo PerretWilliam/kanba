@@ -28,7 +28,7 @@ struct CardView: View {
                     ForEach(card.agents.prefix(4)) { a in
                         AgentIcon(name: a.name).padding(3).frame(width: 18, height: 18)
                             .background(.background, in: Circle()).overlay(Circle().stroke(.quaternary))
-                            .contentShape(Circle()).help(a.tooltip)
+                            .contentShape(Circle()).hoverTip(a.tooltip)
                     }
                 }
             }

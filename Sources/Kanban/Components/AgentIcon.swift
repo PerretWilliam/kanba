@@ -30,3 +30,24 @@ struct AgentIcon: View {
         }
     }
 }
+
+/// Hover tooltip centred on the view (native `.help` follows the cursor and is flaky inside cards).
+private struct HoverTip: ViewModifier {
+    let text: String
+    @State private var on = false
+    @State private var task: Task<Void, Never>?
+    func body(content: Content) -> some View {
+        content
+            .onHover { inside in
+                task?.cancel()
+                if inside {
+                    task = Task { try? await Task.sleep(for: .milliseconds(350)); if !Task.isCancelled { on = true } }
+                } else { on = false }
+            }
+            .popover(isPresented: $on, arrowEdge: .top) {
+                Text(text).font(.system(size: 12)).padding(.horizontal, 10).padding(.vertical, 6).allowsHitTesting(false)
+            }
+    }
+}
+
+extension View { func hoverTip(_ text: String) -> some View { modifier(HoverTip(text: text)) } }

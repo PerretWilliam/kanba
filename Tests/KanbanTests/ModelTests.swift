@@ -53,6 +53,7 @@ import Foundation
         #expect(Agents.kind("codex-mcp-client")?.key == "codex")
         #expect(Agents.kind("Gemini-CLI")?.key == "gemini")
         #expect(Agents.kind("claude-code")?.key == "claude")
+        #expect(Agents.kind("local-agent-mode-kanban")?.key == "claude")
         #expect(Agents.kind("me")?.key == "me")
         #expect(Agents.kind("") == nil)
         #expect(Agents.kind("nobody-knows") == nil)

@@ -32,7 +32,7 @@ struct CardDetail: View {
                         section("Agents") {
                             ForEach(card.agents) { a in
                                 HStack(spacing: 8) {
-                                    AgentIcon(name: a.name).frame(width: 18, height: 18).help(a.tooltip)
+                                    AgentIcon(name: a.name).frame(width: 18, height: 18).contentShape(Rectangle()).hoverTip(a.tooltip)
                                     VStack(alignment: .leading, spacing: 1) {
                                         Text(a.label).font(.inter(13, .medium))
                                         if !a.detail.isEmpty { Text(a.detail).font(.inter(11)).foregroundStyle(.secondary) }
