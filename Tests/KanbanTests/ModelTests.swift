@@ -64,6 +64,7 @@ import Foundation
         #expect(a.label == "Claude" && a.key == "claude" && a.kind?.key == "claude")
         #expect(a.detail == "Opus 5.5 · Élevé" && a.summary == "Claude · Opus 5.5 · Élevé")
         #expect(Agent(name: "claude").summary == "Claude")
+        #expect(a.tooltip == "Claude · Opus 5.5 · Effort : Élevé" && Agent(name: "me").tooltip == "Moi" && Agent(name: "x", effort: "max").tooltip == "x · Effort : Max")
         #expect(Agent(name: "Foo").label == "Foo" && Agent(name: "Foo").key == "foo")
         #expect(Agent(name: "").label == "Autre")
         #expect(Agents.effortLabel("MAX") == "Max" && Agents.effortLabel("weird") == "weird")

@@ -76,6 +76,8 @@ struct Agent: Identifiable, Hashable, Codable {
     var label: String { kind?.label ?? (name.isEmpty ? "Autre" : name) }
     /// "Opus 5.5 · Élevé"
     var detail: String { [model, effort.isEmpty ? "" : Agents.effortLabel(effort)].filter { !$0.isEmpty }.joined(separator: " · ") }
+    /// Hover text on an agent icon: "Claude · Opus 5.5 · Effort : Élevé"
+    var tooltip: String { ([label, model] + (effort.isEmpty ? [] : ["Effort : \(Agents.effortLabel(effort))"])).filter { !$0.isEmpty }.joined(separator: " · ") }
     var summary: String { ([label] + (detail.isEmpty ? [] : [detail])).joined(separator: " · ") }
 }
 

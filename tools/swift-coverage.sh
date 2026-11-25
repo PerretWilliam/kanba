@@ -3,7 +3,7 @@
 # Scope: Model/ and Support/BoardFile.swift. SwiftUI views, components, dialogs and the app entry are excluded (UI, not unit-testable).
 set -e
 cd "$(dirname "$0")/.."
-swift test --enable-code-coverage >/dev/null
+swift test --no-parallel --enable-code-coverage >/dev/null
 PROF=$(dirname "$(swift test --show-codecov-path)")/default.profdata
 XCT=$(find .build -name '*.xctest' -maxdepth 6 | head -1)
 BIN=$XCT/Contents/MacOS/$(basename "$XCT" .xctest)
