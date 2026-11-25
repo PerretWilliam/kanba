@@ -18,7 +18,7 @@ cover:
 logos:
     tools/fetch-logos.sh
 
-# Cut a release: `just release 1.2.0` checks, tags vX.Y.Z and pushes the tag; GitHub Actions builds and publishes it.
+# Cut a release: `just release 1.2.0` bumps the VERSION file, checks, commits and pushes; only that change makes GitHub Actions build, tag vX.Y.Z and publish.
 release version:
     #!/bin/sh
     set -e
@@ -27,6 +27,7 @@ release version:
     [ -z "$(git status --porcelain)" ] || { echo "working tree not clean"; exit 1; }
     git pull --ff-only
     just cover
-    git tag -a "v{{version}}" -m "Kanba {{version}}"
-    git push origin "v{{version}}"
-    echo "Tag v{{version}} pushed: the Release workflow publishes Kanba.app on GitHub."
+    echo "{{version}}" > VERSION
+    git commit -qam "Release {{version}}"
+    git push origin main
+    echo "VERSION is now {{version}}: the Release workflow tags v{{version}} and publishes Kanba.app."

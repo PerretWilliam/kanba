@@ -15,18 +15,18 @@
 - **Manual card order**: drag cards to rank them within a column (top = do first). AI clients read and set the order too (`position`, `reorder_cards`).
 - **Phases**: split a board into sub-boards (e.g. the phases of a project), each with its own columns and cards.
 - **Import** a board from JSON; **export** it as JSON, CSV (opens in Excel) or Markdown.
-- **Plain JSON storage** in `~/Library/Application Support/Kanban/boards.json`; the app reloads it live, so manual edits and scripts just work.
-- **AI-ready via MCP**: Kanba runs a local MCP server, so Claude (or any MCP client) can read your boards and propose changes.
-- **Review before apply**: AI edits are never written directly. They arrive as a git-diff-like proposal that you accept all at once or change by change.
+- **Plain JSON storage** in a folder you choose (Projets menu → *Dossier des données…*; default `~/Library/Application Support/Kanban`). If the folder already holds a `boards.json`, it is loaded; otherwise your boards are copied there. The app watches the folder and the file, so manual edits, scripts, a synced or dropped-in `boards.json` are picked up live.
+- **AI-ready via MCP**: Kanba runs a local MCP server (nothing else to install), so Claude, Codex, Cursor, Gemini… can read your boards and propose changes. Assign cards to AIs (several allowed) with the model and effort level.
+- **Review before apply**: AI edits are never written directly. They arrive as a git-diff-like proposal that you accept all at once or change by change; click a change to open its full before/after in a side panel.
 - Toasts tell you what happened, with the logo of whoever did it (you or the AI).
 
-![An AI proposal waiting for review](docs/proposal.png)
+![An AI proposal in review, with the detail of one change](docs/proposal.png)
 
 > The app UI is currently in French.
 
 ## Install
 
-Requirements: macOS 26+, Xcode command line tools (Swift 6).
+Download the latest `Kanba-X.Y.Z.zip` from [Releases](https://github.com/PerretWilliam/kanba/releases), or build it yourself (macOS 26+, Xcode command line tools, Swift 6):
 
 ```bash
 git clone https://github.com/PerretWilliam/kanba.git
@@ -54,7 +54,7 @@ How it works: tools build a proposal (the base state plus the proposed state) in
 ```
 Sources/Kanban/   SwiftUI app (Model, Views, Components, Support)
 tools/make-icon.swift  regenerates Icon.icns
-build.sh          builds Kanba.app
+build.sh          builds Kanba.app (version = the VERSION file)
 ```
 
 See [CLAUDE.md](CLAUDE.md) for the data format.
@@ -69,6 +69,6 @@ Issues and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Releases & tests
 
-Download `Kanba-X.Y.Z.zip` from the [Releases](https://github.com/PerretWilliam/kanba/releases) page (ad-hoc signed: right-click → Open the first time). See [CONTRIBUTING.md](CONTRIBUTING.md) for `just test` / `just cover` (100% line coverage of the logic layer, MCP server included).
+Releases are published automatically when the `VERSION` file changes on `main` (ad-hoc signed app: right-click → Open the first time). See [CONTRIBUTING.md](CONTRIBUTING.md) for `just test` / `just cover` (100% line coverage of the logic layer, MCP server included).
 
 AI logos are from [Simple Icons](https://simpleicons.org) (CC0); the marks belong to their owners and only identify the AI assigned to a card.

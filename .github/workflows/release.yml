@@ -1,8 +1,9 @@
 name: Release
-# Push a tag vX.Y.Z (just release X.Y.Z): tests, build, zip, checksum, GitHub Release with the changelog.
+# A release happens only when the VERSION file changes on main (just release X.Y.Z): tests, build, zip, checksum, tag vX.Y.Z, GitHub Release with the changelog.
 on:
   push:
-    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+    branches: [main]
+    paths: [VERSION]
 permissions:
   contents: write
 jobs:
@@ -11,20 +12,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }   # full history + tags for the changelog
+      - name: Is this a new version?
+        id: v
+        run: |
+          V=$(tr -d '[:space:]' < VERSION)
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          git rev-parse -q --verify "refs/tags/v$V" >/dev/null && echo "v$V already released: nothing to do" && echo "skip=true" >> "$GITHUB_OUTPUT" || true
       - name: Gates (tests + 100% coverage)
+        if: steps.v.outputs.skip != 'true'
         run: tools/swift-coverage.sh
       - name: Build
-        run: VERSION="${GITHUB_REF_NAME#v}" ./build.sh
+        if: steps.v.outputs.skip != 'true'
+        run: ./build.sh
       - name: Package
+        if: steps.v.outputs.skip != 'true'
         run: |
-          V="${GITHUB_REF_NAME#v}"
+          V=${{ steps.v.outputs.version }}
           ditto -c -k --keepParent Kanba.app "Kanba-$V.zip"
           shasum -a 256 "Kanba-$V.zip" > SHA256SUMS
-      - name: Publish
+      - name: Tag and publish
+        if: steps.v.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          V=${{ steps.v.outputs.version }}
           # Changelog = commits since the previous tag (generated notes alone only list merged PRs).
-          PREV=$(git describe --tags --abbrev=0 "$GITHUB_REF_NAME^" 2>/dev/null || true)
-          git log ${PREV:+$PREV..}"$GITHUB_REF_NAME" --no-merges --format='- %s' > NOTES.md
-          gh release create "$GITHUB_REF_NAME" --verify-tag --notes-file NOTES.md --generate-notes --title "Kanba ${GITHUB_REF_NAME#v}" "Kanba-${GITHUB_REF_NAME#v}.zip" SHA256SUMS
+          PREV=$(git describe --tags --abbrev=0 2>/dev/null || true)
+          git log ${PREV:+$PREV..}HEAD --no-merges --format='- %s' > NOTES.md
+          gh release create "v$V" --target "$GITHUB_SHA" --notes-file NOTES.md --generate-notes --title "Kanba $V" "Kanba-$V.zip" SHA256SUMS

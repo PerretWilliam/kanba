@@ -32,7 +32,7 @@ Requires macOS 26+ and Swift 6 (the code builds in Swift 5 language mode).
 
 ## Releases
 
-Maintainers: `just release 1.2.0` (from a clean `main`) runs the gates, tags `v1.2.0` and pushes it. The Release workflow rebuilds, tests, zips `Kanba.app` (ad-hoc signed, not notarized: right-click → Open the first time), and publishes a GitHub Release with generated notes, and `SHA256SUMS`.
+The app version is the `VERSION` file. A release only happens when it changes on `main`: `just release 1.2.0` (from a clean `main`) runs the gates, writes `VERSION`, commits and pushes. The Release workflow then tests, builds, zips `Kanba.app` (ad-hoc signed, not notarized: right-click → Open the first time), tags `v1.2.0` and publishes a GitHub Release with the changelog and `SHA256SUMS`. Any other push to `main` builds nothing and tags nothing.
 
 ## Reporting bugs
 
