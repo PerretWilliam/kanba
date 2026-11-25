@@ -266,28 +266,26 @@ import Foundation
         #expect(await eventually { s.boards.isEmpty })
     }
 
-    @Test func filterIsSavedSharedAndResetPerTab() async throws {
-        let a = Board(name: "A", cards: [Card(title: "x", status: "todo", agents: [Agent(name: "claude")])]), b = Board(name: "B")
+    @Test func filterIsScreenStateSetByAOneShotFile() async throws {
+        let a = Board(name: "A"), b = Board(name: "B")
+        let dir0 = Self.tmp(); try Data(#"{"tag":"old"}"#.utf8).write(to: dir0.appendingPathComponent("filter.json"))   // leftover from a previous run
+        setenv("KANBA_DATA", dir0.path, 1)
+        #expect(Store().filter.isEmpty && !FileManager.default.fileExists(atPath: dir0.appendingPathComponent("filter.json").path))
         let (s, dir) = try make(boards: [a, b], selected: a.id)
+        let file = dir.appendingPathComponent("filter.json")
+        s.filter = ViewFilter(agent: "claude", query: "x")     // typing in the app never touches the disk
+        let boardsJSON = try String(contentsOf: dir.appendingPathComponent("boards.json"), encoding: .utf8)
+        #expect(!boardsJSON.contains("filter") && !boardsJSON.contains("claude"))
+        s.selected = b.id                                      // another tab: filter reset
         #expect(s.filter.isEmpty)
-        s.filter = ViewFilter(agent: "claude", query: "x")
-        func file() throws -> [String: Any] { try JSONSerialization.jsonObject(with: Data(contentsOf: dir.appendingPathComponent("boards.json"))) as! [String: Any] }
-        let saved = try file()["filter"] as? [String: Any]
-        #expect(saved?["agent"] as? String == "claude")
-        s.selected = b.id                                  // another tab: the filter goes away, also from the file
-        let afterSwitch = try file()["filter"]
-        #expect(s.filter.isEmpty && afterSwitch == nil)
-        // an external tool (MCP set_filter) writes it: the view follows
-        var json = try file(); json["filter"] = ["tag": "ops", "priority": 2]
-        try JSONSerialization.data(withJSONObject: json).write(to: dir.appendingPathComponent("boards.json"), options: .atomic)
+        try Data(#"{"tag":"ops","priority":2}"#.utf8).write(to: file, options: .atomic)   // MCP set_filter
         #expect(await eventually { s.filter.tag == "ops" })
-        #expect(s.filter.priority == .high)
-        // and a restart keeps it
-        setenv("KANBA_DATA", dir.path, 1)
-        #expect(Store().filter.tag == "ops")
-        json.removeValue(forKey: "filter")                 // removed from the file: cleared
-        try JSONSerialization.data(withJSONObject: json).write(to: dir.appendingPathComponent("boards.json"), options: .atomic)
+        #expect(s.filter.priority == .high && !FileManager.default.fileExists(atPath: file.path))   // applied, then deleted
+        try Data(#"{}"#.utf8).write(to: file, options: .atomic)   // no argument: cleared
         #expect(await eventually { s.filter.isEmpty })
+        try Data("nope".utf8).write(to: file, options: .atomic)   // invalid: ignored
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(s.filter.isEmpty)
     }
 
     // MARK: AI proposals

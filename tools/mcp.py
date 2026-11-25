@@ -10,6 +10,7 @@ DEFAULT_COLS = [{"id": "todo", "name": "À faire", "color": "gray"}, {"id": "doi
                 {"id": "done", "name": "Terminé", "color": "green"}]
 
 PROP = os.path.join(os.path.dirname(PATH), "proposal.json")  # pending changes, validated by the user in the app
+FILTER = os.path.join(os.path.dirname(PATH), "filter.json")  # one-shot: the app applies it in memory, then deletes it
 ACTOR, proposed = "claude", False
 
 def write(path, obj):
@@ -93,7 +94,7 @@ def get_boards(a):
             and ("priority" not in a or c.get("priority", 1) == PRIO[a["priority"]]) and ("tag" not in a or a["tag"] in c.get("tags", [])) \
             and ("agent" not in a or has_agent(c, a["agent"]))
     boards = [board_of(d, a["board"])] if "board" in a else d["boards"]
-    return {"selected": board_of(d)["id"], "filter": json.load(open(PATH)).get("filter"), "boards": [{
+    return {"selected": board_of(d)["id"], "boards": [{
         "id": b["id"], "name": b["name"], "parent": b.get("parent"), "closed": bool(b.get("closed")), "columns": [{"id": c["id"], "name": c["name"], "color": c["color"]} for c in b["columns"]],
         "done_column": b["columns"][-1]["name"],
         "cards": [{"position": 1 + sum(1 for y in b["cards"][:b["cards"].index(c)] if y["status"] == c["status"]),
@@ -180,12 +181,10 @@ def select_board(a):  # UI state, not data: applied immediately
             write(path, x)
     return "ok"
 
-def set_filter(a):  # UI state like select_board: applied immediately, to the tab on screen; no argument clears it
+def set_filter(a):  # screen state, not data: handed to the app through a one-shot file it deletes; no argument clears it
     f = {k: a[k] for k in ("tag", "agent", "query") if a.get(k)}
     if "priority" in a: f["priority"] = PRIO[a["priority"]]
-    x = json.load(open(PATH)); x.pop("filter", None)
-    if f: x["filter"] = f
-    write(PATH, x); return {"filter": a and f}
+    write(FILTER, f); return {"filter": f}
 
 def delete_board(a):
     d = load(); b = board_of(d, a["board"])
@@ -261,7 +260,7 @@ TOOLS = {
                    ["name"], name=STR, parent=BOARD, columns=ARR, cards={"type": "array", "items": S(**CARD)}),
     "update_board": T(update_board, "Rename a board and/or close it (closed=true: hides the tab, nothing is deleted, it stays in the app's Projets menu) or reopen it (closed=false).", ["board"], board=BOARD, name=STR, closed=BOOL),
     "select_board": T(select_board, "Switch the app to this tab (reopens it if it was closed).", ["board"], board=BOARD),
-    "set_filter": T(set_filter, "Filter what the app shows on the current tab, like the user's search field and filter button: any of priority, tag, agent (e.g. 'claude', 'me', or part of a model name) and query (text in title, notes, tags, agents). Replaces the current filter; call it with no argument to clear it. Applied immediately; the filter is dropped when the user or select_board changes tab. get_boards (with the same fields) only reads, it does not change the screen.", [], priority={"enum": list(PRIO)}, tag=STR, agent=STR, query=STR),
+    "set_filter": T(set_filter, "Filter what the app shows on the current tab, like the user's search field and filter button: any of priority, tag, agent (e.g. 'claude', 'me', or part of a model name) and query (text in title, notes, tags, agents). Replaces the current filter; call it with no argument to clear it. Applied immediately and only on screen (nothing is saved): it is dropped when the tab changes or the app restarts. get_boards (with the same fields) only reads, it does not change the screen.", [], priority={"enum": list(PRIO)}, tag=STR, agent=STR, query=STR),
     "delete_board": T(delete_board, "Close a board (tab) or phase and delete its cards (a board's phases go with it). Deleting the last one shows the app's welcome page.", ["board"], board=BOARD),
     "export_board": T(export_board, "Export a board to a file: json (app's share format, re-importable, default), csv (one row per card, opens in Excel) or markdown.", ["path"], board=BOARD, path=STR, format={"type": "string", "enum": ["json", "csv", "markdown"]}, overwrite=BOOL),
     "import_board": T(import_board, "Import a board from a JSON file exported by the app or export_board, as a new tab.", ["path"], path=STR),

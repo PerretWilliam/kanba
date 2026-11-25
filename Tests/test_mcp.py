@@ -12,7 +12,7 @@ def card(i, title, status="todo", **kw): return {"id": f"C{i}", "title": title, 
 class Base(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(); self.dir = self.tmp.name
-        m.PATH = os.path.join(self.dir, "boards.json"); m.PROP = os.path.join(self.dir, "proposal.json")
+        m.PATH = os.path.join(self.dir, "boards.json"); m.PROP = os.path.join(self.dir, "proposal.json"); m.FILTER = os.path.join(self.dir, "filter.json")
         m.ACTOR, m.proposed = "claude", False
         self.boards = [{"id": B1, "name": "Main", "columns": [dict(c) for c in COLS], "cards": [
             card(1, "one"), card(2, "two"), card(3, "three", "doing", priority=2, tags=["x"], notes="Hello", due=86400.0,
@@ -139,12 +139,11 @@ class Boards(Base):
         m.add_board({"name": "Own cols", "parent": "Main", "columns": ["Only"]}); self.assertEqual(len(self.prop()["boards"][-1]["columns"]), 1)
 
     def test_set_filter(self):
-        self.assertIsNone(m.get_boards({})["filter"])
+        flt = lambda: json.load(open(m.FILTER))
         r = m.set_filter({"priority": "high", "tag": "ops", "agent": "claude", "query": "x", "ignored": 1})
-        self.assertEqual(r, {"filter": {"tag": "ops", "agent": "claude", "query": "x", "priority": 2}})
-        self.assertEqual(self.real()["filter"], r["filter"]); self.assertEqual(m.get_boards({})["filter"], r["filter"])
-        self.assertEqual(m.set_filter({"tag": ""}), {"filter": {}}); self.assertNotIn("filter", self.real())   # empty = cleared
-        m.set_filter({"agent": "me"}); self.assertEqual(m.set_filter({}), {"filter": {}}); self.assertNotIn("filter", self.real())
+        self.assertEqual(r, {"filter": {"tag": "ops", "agent": "claude", "query": "x", "priority": 2}}); self.assertEqual(flt(), r["filter"])
+        self.assertNotIn("filter", self.real()); self.assertNotIn("filter", m.get_boards({}))   # never stored in the boards
+        self.assertEqual(m.set_filter({"tag": ""}), {"filter": {}}); self.assertEqual(flt(), {})   # empty = clears the screen filter
 
     def test_update_select_delete(self):
         m.update_board({"board": "Other", "name": "Renamed", "closed": True}); self.assertEqual((self.b(1)["name"], self.b(1)["closed"]), ("Renamed", True))

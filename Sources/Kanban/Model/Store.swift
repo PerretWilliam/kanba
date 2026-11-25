@@ -15,8 +15,8 @@ struct MoveTarget: Identifiable {
         if selected != oldValue { filter = ViewFilter() }   // a filter belongs to the tab it was set on
         UserDefaults.standard.set(selected.uuidString, forKey: "selectedBoard"); save()
     } }
-    // Saved too: the MCP set_filter tool writes it, and reads show what is on screen.
-    @Published var filter = ViewFilter() { didSet { if filter != oldValue { save() } } }
+    // Screen state, never saved. The MCP set_filter tool hands one over through filter.json (read once, then deleted).
+    @Published var filter = ViewFilter()
 
     @Published var toast: Toast?
     @Published var proposal: Proposal?     // pending changes from an AI client (proposal.json)
@@ -35,7 +35,7 @@ struct MoveTarget: Identifiable {
     }
     private func plural(_ n: Int, _ w: String) -> String { "\(n) \(w)\(n > 1 ? "s" : "")" }
 
-    private struct Saved: Codable { var boards: [Board]; var selected: UUID; var filter: ViewFilter? }
+    private struct Saved: Codable { var boards: [Board]; var selected: UUID }
     private let dir: URL = {
         // KANBA_DATA overrides the data folder (experiments, tests) without touching your real boards.
         let d = ProcessInfo.processInfo.environment["KANBA_DATA"].map { URL(fileURLWithPath: $0) }
@@ -45,10 +45,11 @@ struct MoveTarget: Identifiable {
     }()
     private var url: URL { dir.appendingPathComponent("boards.json") }
     private var proposalURL: URL { dir.appendingPathComponent("proposal.json") }
+    private var filterURL: URL { dir.appendingPathComponent("filter.json") }
 
     init() {
         if let s = try? JSONDecoder().decode(Saved.self, from: Data(contentsOf: url)) {   // may hold zero boards: welcome page
-            boards = s.boards; selected = s.selected; fileSelected = s.selected; filter = s.filter ?? ViewFilter()
+            boards = s.boards; selected = s.selected; fileSelected = s.selected
         } else {
             // First launch after the tabs update: adopt the old single-board file.
             let old = (try? JSONDecoder().decode([Card].self, from: Data(contentsOf: dir.appendingPathComponent("cards.json")))) ?? []
@@ -57,8 +58,17 @@ struct MoveTarget: Identifiable {
         if let id = UserDefaults.standard.string(forKey: "selectedBoard").flatMap(UUID.init), boards.contains(where: { $0.id == id }) { selected = id }
         if let f = boards.first, !boards.contains(where: { $0.id == selected }) { selected = f.id }
         save()  // file's "selected" may be stale (e.g. taken from UserDefaults above)
+        try? FileManager.default.removeItem(at: filterURL)   // a leftover from a previous run is not for this session
         watch()
         loadProposal()
+    }
+
+    /// One-shot filter from an AI client: apply, then delete so nothing persists. Runs after reload(), so a tab switch sent
+    /// together with it (which resets the filter) does not undo it.
+    private func loadFilter() {
+        guard let d = try? Data(contentsOf: filterURL), let f = try? JSONDecoder().decode(ViewFilter.self, from: d) else { return }
+        try? FileManager.default.removeItem(at: filterURL)
+        withAnimation { filter = f }
     }
 
     private var fileSelected: UUID?      // "selected" as last seen in the file: an external change to it switches the tab
@@ -66,7 +76,7 @@ struct MoveTarget: Identifiable {
     private var watcher: DispatchSourceFileSystemObject?
 
     private func save() {
-        guard let d = try? JSONEncoder().encode(Saved(boards: boards, selected: selected, filter: filter.isEmpty ? nil : filter)) else { return }
+        guard let d = try? JSONEncoder().encode(Saved(boards: boards, selected: selected)) else { return }
         lastData = d; fileSelected = selected
         try? d.write(to: url, options: .atomic)
     }
@@ -77,7 +87,7 @@ struct MoveTarget: Identifiable {
         let fd = open(dir.path, O_EVTONLY)
         guard fd >= 0 else { return }
         let src = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: .write, queue: .main)
-        src.setEventHandler { [weak self] in self?.reload(); self?.loadProposal() }
+        src.setEventHandler { [weak self] in self?.reload(); self?.loadFilter(); self?.loadProposal() }
         src.setCancelHandler { Darwin.close(fd) }
         src.resume()
         watcher = src
@@ -91,7 +101,6 @@ struct MoveTarget: Identifiable {
         fileSelected = s.selected
         withAnimation {
             if let f = s.boards.first { selected = s.boards.contains { $0.id == target } ? target : f.id }
-            filter = s.filter ?? ViewFilter()   // after `selected`, which resets it; before `boards`, whose save writes the final file
             boards = s.boards
         }
     }
