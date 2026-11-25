@@ -67,6 +67,7 @@ struct MCPToolsTests {
         #expect((c3["agents"] as? [[String: Any]])?.first?["model"] as? String == "Opus 5.5")
         #expect(cards.first { $0["title"] as? String == "two" }?["position"] as? Int == 2)
         #expect(cards.first { $0["title"] as? String == "orphan" }?["column"] is NSNull)
+        #expect(cards.allSatisfy { $0["notes"] as? String == "" })   // no notes when listing every board
         func ids(_ a: [String: Any]) throws -> [String] {
             let o = try obj(run(&w, "get_boards", ["board": "Main"].merging(a) { $1 }))
             return ((o["boards"] as? [[String: Any]])?[0]["cards"] as? [[String: Any]] ?? []).compactMap { $0["title"] as? String }

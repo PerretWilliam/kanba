@@ -200,6 +200,7 @@ extension Workspace {
                 && (agent == nil || c.agents.contains { ($0.name + " " + $0.model).lowercased().contains(agent!) })
         }
         let list = try (a["board"] as? String).map { [boards[try boardIndex($0)]] } ?? boards
+        let withNotes = a["board"] != nil   // all boards at once would be huge: notes only when one board is asked for
         let out: [[String: Any]] = list.map { b in
             ["id": b.id.uuidString, "name": b.name, "parent": Self.orNull(b.parent?.uuidString), "closed": b.closed == true,
              "columns": b.columns.map { ["id": $0.id, "name": $0.name, "color": $0.color.rawValue] },
@@ -207,7 +208,7 @@ extension Workspace {
              "cards": b.cards.enumerated().filter { keep($0.element) }.map { i, c in
                  ["position": 1 + b.cards[..<i].filter { $0.status == c.status }.count, "id": c.id.uuidString, "title": c.title,
                   "column": Self.orNull(b.columns.first { $0.id == c.status }?.name),
-                  "priority": ["low", "medium", "high"][c.priority.rawValue], "tags": c.tags, "notes": c.notes,
+                  "priority": ["low", "medium", "high"][c.priority.rawValue], "tags": c.tags, "notes": withNotes ? c.notes : "",
                   "agents": c.agents.map { ["name": $0.name, "model": $0.model, "effort": $0.effort] },
                   "due": Self.orNull(c.due.map(Self.iso))] as [String: Any] }]
         }
