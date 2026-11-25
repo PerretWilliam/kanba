@@ -138,6 +138,14 @@ class Boards(Base):
         with self.assertRaises(ValueError): m.add_board({"name": "Sub", "parent": "Phase"})
         m.add_board({"name": "Own cols", "parent": "Main", "columns": ["Only"]}); self.assertEqual(len(self.prop()["boards"][-1]["columns"]), 1)
 
+    def test_set_filter(self):
+        self.assertIsNone(m.get_boards({})["filter"])
+        r = m.set_filter({"priority": "high", "tag": "ops", "agent": "claude", "query": "x", "ignored": 1})
+        self.assertEqual(r, {"filter": {"tag": "ops", "agent": "claude", "query": "x", "priority": 2}})
+        self.assertEqual(self.real()["filter"], r["filter"]); self.assertEqual(m.get_boards({})["filter"], r["filter"])
+        self.assertEqual(m.set_filter({"tag": ""}), {"filter": {}}); self.assertNotIn("filter", self.real())   # empty = cleared
+        m.set_filter({"agent": "me"}); self.assertEqual(m.set_filter({}), {"filter": {}}); self.assertNotIn("filter", self.real())
+
     def test_update_select_delete(self):
         m.update_board({"board": "Other", "name": "Renamed", "closed": True}); self.assertEqual((self.b(1)["name"], self.b(1)["closed"]), ("Renamed", True))
         m.update_board({"board": "Renamed", "closed": False}); self.assertNotIn("closed", self.b(1))

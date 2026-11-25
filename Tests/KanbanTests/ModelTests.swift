@@ -83,6 +83,26 @@ import Foundation
     }
 }
 
+@Suite struct ViewFilterTests {
+    @Test func matching() throws {
+        let c = Card(title: "Pay invoices", notes: "monthly", priority: .high, status: "todo", tags: ["ops"],
+                     agents: [Agent(name: "claude-code", model: "Opus 5.5"), Agent(name: "me")])
+        #expect(ViewFilter().isEmpty && ViewFilter().matches(c))
+        #expect(ViewFilter(priority: .high).matches(c) && !ViewFilter(priority: .low).matches(c))
+        #expect(ViewFilter(tag: "ops").matches(c) && !ViewFilter(tag: "dev").matches(c))
+        #expect(ViewFilter(agent: "claude").matches(c) && ViewFilter(agent: "ME").matches(c) && ViewFilter(agent: "opus").matches(c))
+        #expect(!ViewFilter(agent: "gemini").matches(c))
+        #expect(ViewFilter(query: "invoice").matches(c) && ViewFilter(query: "MONTHLY").matches(c) && !ViewFilter(query: "zzz").matches(c))
+        #expect(ViewFilter(priority: .high, tag: "ops", agent: "me", query: "pay").matches(c) && !ViewFilter(tag: "ops", query: "zzz").matches(c))
+        #expect(!ViewFilter(query: "x").isEmpty && !ViewFilter(query: "x").hasChips && ViewFilter(tag: "t").hasChips)
+    }
+    @Test func codableIsTolerant() throws {
+        let f = try JSONDecoder().decode(ViewFilter.self, from: Data(#"{"tag":"a","priority":1}"#.utf8))
+        #expect(f == ViewFilter(priority: .medium, tag: "a") && f.query == "")
+        #expect(try JSONDecoder().decode(ViewFilter.self, from: JSONEncoder().encode(f)) == f)
+    }
+}
+
 @Suite struct MarkdownTests {
     @Test func blocks() {
         let md = "# Title\n###### deep\n#nospace\n---\n> quote\n- a\n  * [ ] todo\n- [x] done\n+ [X] Done\n1. one\n12. twelve\n3.nope\n\nplain\n```\ncode\n  indented\n```\n```\nunterminated"

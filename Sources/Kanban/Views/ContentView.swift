@@ -3,14 +3,10 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var store = Store()
     @State private var sheet: Sheet?
-    @State private var filter: Priority?
-    @State private var filterTag: String?
-    @State private var filterAgent: String?
     @State private var detailID: UUID?
     @FocusState private var searchFocused: Bool
     @State private var cardToDelete: Card?
     @State private var showFilter = false
-    @State private var query = ""
     // Custom drag (system drag-and-drop keeps a "flying" preview for ~0.5s after release)
     @State private var dragging: Card?
     @State private var dragPoint = CGPoint.zero
@@ -74,7 +70,7 @@ struct ContentView: View {
             .confirmationDialog("Supprimer \(board.parent == nil ? "le tableau" : "la phase") « \(board.name) » ?", isPresented: $confirmDelete) {
                 Button("Supprimer", role: .destructive) { store.remove(store.selected) }
             } message: { Text(board.parent == nil && !store.phases.isEmpty ? "Ses phases, colonnes et cartes seront supprimées." : "Ses colonnes et ses cartes seront supprimées.") }
-            .onChange(of: store.selected) { filter = nil; filterTag = nil; filterAgent = nil; query = ""; detailID = nil }
+            .onChange(of: store.selected) { detailID = nil }
     }
 
     /// "N to review" pill: opens the diff of what an AI client proposed.
@@ -179,9 +175,9 @@ struct ContentView: View {
             reviewButton
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                TextField("Rechercher", text: $query).textFieldStyle(.plain).focused($searchFocused)
-                if !query.isEmpty {
-                    Button { query = "" } label: { Image(systemName: "xmark.circle.fill") }.buttonStyle(.plain).foregroundStyle(.secondary)
+                TextField("Rechercher", text: $store.filter.query).textFieldStyle(.plain).focused($searchFocused)
+                if !store.filter.query.isEmpty {
+                    Button { store.filter.query = "" } label: { Image(systemName: "xmark.circle.fill") }.buttonStyle(.plain).foregroundStyle(.secondary)
                 }
                 Button("") { searchFocused = true }.keyboardShortcut("f").opacity(0).frame(width: 0)
             }
@@ -198,11 +194,11 @@ struct ContentView: View {
                 Button("Nouveau tableau…") { sheet = .new }
             } label: { bar("square.stack") }
                 .help("Tous les projets")
-            let active = filter != nil || filterTag != nil || filterAgent != nil
+            let active = store.filter.hasChips
             Button { showFilter = true } label: { bar("line.3.horizontal.decrease", active ? .accentColor : .primary) }
                 .help("Filtrer").disabled(store.topBoards.isEmpty)
                 .popover(isPresented: $showFilter, arrowEdge: .bottom) {
-                    FilterPanel(filter: $filter, tag: $filterTag, agent: $filterAgent, tags: store.allTags, agents: store.allAgents)
+                    FilterPanel(filter: $store.filter.priority, tag: $store.filter.tag, agent: $store.filter.agent, tags: store.allTags, agents: store.allAgents)
                 }
             Menu {
                 ForEach(BoardIO.Format.allCases, id: \.self) { f in Button("Exporter en \(f.label)…") { BoardIO.export(board, as: f) } }
@@ -226,9 +222,6 @@ struct ContentView: View {
 
     private func cards(in column: String) -> [Card] {
         board.cards   // manual order = array order (drag to reorder; AI clients set it too)
-            .filter { $0.status == column && (filter == nil || $0.priority == filter)
-                && (filterTag == nil || $0.tags.contains(filterTag!))
-                && (filterAgent == nil || $0.agents.contains { $0.key == filterAgent })
-                && (query.isEmpty || ([$0.title, $0.notes] + $0.tags + $0.agents.flatMap { [$0.label, $0.model] }).contains { $0.localizedStandardContains(query) }) }
+            .filter { $0.status == column && store.filter.matches($0) }
     }
 }

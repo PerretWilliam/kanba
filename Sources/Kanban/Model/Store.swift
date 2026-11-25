@@ -11,7 +11,12 @@ struct MoveTarget: Identifiable {
 @MainActor final class Store: ObservableObject {
     @Published var boards: [Board] = [] { didSet { save() } }
     // Saved with the boards so external tools (MCP) always know which tab is on screen.
-    @Published var selected = UUID() { didSet { UserDefaults.standard.set(selected.uuidString, forKey: "selectedBoard"); save() } }
+    @Published var selected = UUID() { didSet {
+        if selected != oldValue { filter = ViewFilter() }   // a filter belongs to the tab it was set on
+        UserDefaults.standard.set(selected.uuidString, forKey: "selectedBoard"); save()
+    } }
+    // Saved too: the MCP set_filter tool writes it, and reads show what is on screen.
+    @Published var filter = ViewFilter() { didSet { if filter != oldValue { save() } } }
 
     @Published var toast: Toast?
     @Published var proposal: Proposal?     // pending changes from an AI client (proposal.json)
@@ -30,7 +35,7 @@ struct MoveTarget: Identifiable {
     }
     private func plural(_ n: Int, _ w: String) -> String { "\(n) \(w)\(n > 1 ? "s" : "")" }
 
-    private struct Saved: Codable { var boards: [Board]; var selected: UUID }
+    private struct Saved: Codable { var boards: [Board]; var selected: UUID; var filter: ViewFilter? }
     private let dir: URL = {
         // KANBA_DATA overrides the data folder (experiments, tests) without touching your real boards.
         let d = ProcessInfo.processInfo.environment["KANBA_DATA"].map { URL(fileURLWithPath: $0) }
@@ -43,7 +48,7 @@ struct MoveTarget: Identifiable {
 
     init() {
         if let s = try? JSONDecoder().decode(Saved.self, from: Data(contentsOf: url)) {   // may hold zero boards: welcome page
-            boards = s.boards; selected = s.selected; fileSelected = s.selected
+            boards = s.boards; selected = s.selected; fileSelected = s.selected; filter = s.filter ?? ViewFilter()
         } else {
             // First launch after the tabs update: adopt the old single-board file.
             let old = (try? JSONDecoder().decode([Card].self, from: Data(contentsOf: dir.appendingPathComponent("cards.json")))) ?? []
@@ -61,7 +66,7 @@ struct MoveTarget: Identifiable {
     private var watcher: DispatchSourceFileSystemObject?
 
     private func save() {
-        guard let d = try? JSONEncoder().encode(Saved(boards: boards, selected: selected)) else { return }
+        guard let d = try? JSONEncoder().encode(Saved(boards: boards, selected: selected, filter: filter.isEmpty ? nil : filter)) else { return }
         lastData = d; fileSelected = selected
         try? d.write(to: url, options: .atomic)
     }
@@ -86,6 +91,7 @@ struct MoveTarget: Identifiable {
         fileSelected = s.selected
         withAnimation {
             if let f = s.boards.first { selected = s.boards.contains { $0.id == target } ? target : f.id }
+            filter = s.filter ?? ViewFilter()   // after `selected`, which resets it; before `boards`, whose save writes the final file
             boards = s.boards
         }
     }

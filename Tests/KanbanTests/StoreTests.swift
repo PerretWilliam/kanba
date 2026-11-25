@@ -266,6 +266,30 @@ import Foundation
         #expect(await eventually { s.boards.isEmpty })
     }
 
+    @Test func filterIsSavedSharedAndResetPerTab() async throws {
+        let a = Board(name: "A", cards: [Card(title: "x", status: "todo", agents: [Agent(name: "claude")])]), b = Board(name: "B")
+        let (s, dir) = try make(boards: [a, b], selected: a.id)
+        #expect(s.filter.isEmpty)
+        s.filter = ViewFilter(agent: "claude", query: "x")
+        func file() throws -> [String: Any] { try JSONSerialization.jsonObject(with: Data(contentsOf: dir.appendingPathComponent("boards.json"))) as! [String: Any] }
+        let saved = try file()["filter"] as? [String: Any]
+        #expect(saved?["agent"] as? String == "claude")
+        s.selected = b.id                                  // another tab: the filter goes away, also from the file
+        let afterSwitch = try file()["filter"]
+        #expect(s.filter.isEmpty && afterSwitch == nil)
+        // an external tool (MCP set_filter) writes it: the view follows
+        var json = try file(); json["filter"] = ["tag": "ops", "priority": 2]
+        try JSONSerialization.data(withJSONObject: json).write(to: dir.appendingPathComponent("boards.json"), options: .atomic)
+        #expect(await eventually { s.filter.tag == "ops" })
+        #expect(s.filter.priority == .high)
+        // and a restart keeps it
+        setenv("KANBA_DATA", dir.path, 1)
+        #expect(Store().filter.tag == "ops")
+        json.removeValue(forKey: "filter")                 // removed from the file: cleared
+        try JSONSerialization.data(withJSONObject: json).write(to: dir.appendingPathComponent("boards.json"), options: .atomic)
+        #expect(await eventually { s.filter.isEmpty })
+    }
+
     // MARK: AI proposals
 
     func propose(_ s: Store, _ dir: URL, actor: String = "claude-code", _ change: (inout [Board]) -> Void) throws {
