@@ -103,6 +103,10 @@ extension Workspace {
         let board = a["board"] as? String
         switch name {
         case "get_boards": return try getBoards(a)
+        case "add_cards", "update_cards":   // batch: each item takes the single tool's arguments (top-level ones like `board` are defaults); all or nothing
+            let one = String(name.dropLast()), base = a.filter { $0.key != "cards" }
+            let r = try (a["cards"] as? [[String: Any]] ?? []).map { try call(one, base.merging($0) { $1 }) }
+            return one == "add_card" ? "[" + r.joined(separator: ",") + "]" : "\(r.count) cards updated"   // add: [{"id":…},…]
         case "add_card":
             let bi = try boardIndex(board), c = try makeCard(a, boards[bi])
             boards[bi].cards.append(c)

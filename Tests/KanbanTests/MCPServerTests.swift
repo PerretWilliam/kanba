@@ -23,7 +23,7 @@ extension StoreTests {
         #expect(result["protocolVersion"] as? String == "2025-01-01" && (result["serverInfo"] as? [String: Any])?["name"] as? String == "kanban" && sid != nil)
         #expect(try rpc(s, "initialize").reply?["result"] != nil)   // no params: defaults
         let names = try ((rpc(s, "tools/list").reply?["result"] as? [String: Any])?["tools"] as? [[String: Any]])?.compactMap { $0["name"] as? String } ?? []
-        #expect(names.count == 16 && names.contains("update_card"))
+        #expect(names.count == 18 && names.contains("update_card"))
         #expect(try rpc(s, "ping").reply?["result"] != nil)
         #expect(try rpc(s, "initialized", id: nil).reply == nil)   // notification: no reply
         #expect(try (rpc(s, "nope").reply?["error"] as? [String: Any])?["code"] as? Int == -32601)

@@ -25,6 +25,17 @@ struct MCPToolsTests {
         catch { Issue.record("\(error)") }
     }
 
+    @Test func batchCards() throws {
+        var w = make()
+        let n = w.boards[0].cards.count
+        let ids = try JSONSerialization.jsonObject(with: Data(run(&w, "add_cards", ["board": "Main", "cards": [["title": "a"], ["title": "b", "priority": "high"]]]).utf8)) as? [[String: Any]]
+        #expect(ids?.count == 2 && w.boards[0].cards.count == n + 2)
+        let id = try #require(ids?[0]["id"] as? String)
+        _ = try run(&w, "update_cards", ["cards": [["card_id": id, "title": "A"]]])
+        #expect(w.boards[0].cards.contains { $0.title == "A" })
+        fails(&w, "update_cards", ["cards": [["card_id": id, "title": "X"], ["card_id": "nope"]]], "card not found")
+    }
+
     @Test func lookups() throws {
         var w = make()
         #expect(try w.boardIndex(nil) == 0 && w.boardIndex("other") == 1 && w.boardIndex(Self.b2.uuidString.lowercased()) == 1)
