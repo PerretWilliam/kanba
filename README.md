@@ -31,7 +31,7 @@ Download the latest `Kanba-X.Y.Z.zip` from [Releases](https://github.com/PerretW
 ```bash
 git clone https://github.com/PerretWilliam/kanba.git
 cd kanba
-./build.sh
+just macos build
 open Kanba.app
 ```
 
@@ -52,9 +52,9 @@ How it works: tools build a proposal (the base state plus the proposed state) in
 ## Project layout
 
 ```
-Sources/Kanban/   SwiftUI app (Model, Views, Components, Support)
-tools/make-icon.swift  regenerates Icon.icns
-build.sh          builds Kanba.app (version = the VERSION file)
+apps/macos/Sources/Kanban/   SwiftUI app (Model, Views, Components, Support)
+apps/macos/tools/make-icon.swift  regenerates Icon.icns
+apps/macos/build.sh  builds Kanba.app (version = the root VERSION file)
 ```
 
 See [CLAUDE.md](CLAUDE.md) for the data format.
@@ -69,6 +69,6 @@ Issues and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Releases & tests
 
-Releases are published automatically when the `VERSION` file changes on `main` (ad-hoc signed app: right-click → Open the first time). See [CONTRIBUTING.md](CONTRIBUTING.md) for `just test` / `just cover` (100% line coverage of the logic layer, MCP server included).
+Releases are published automatically when the `VERSION` file changes on `main` (ad-hoc signed app: right-click → Open the first time). See [CONTRIBUTING.md](CONTRIBUTING.md) for `just macos test` / `just macos cover` (100% line coverage of the logic layer, MCP server included).
 
 AI logos are from [Simple Icons](https://simpleicons.org) (CC0); the marks belong to their owners and only identify the AI assigned to a card.

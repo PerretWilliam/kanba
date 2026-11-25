@@ -8,6 +8,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Tests + 100% line coverage (logic layer)
-        run: tools/swift-coverage.sh
+        run: apps/macos/tools/swift-coverage.sh
       - name: Build the app
-        run: ./build.sh
+        run: apps/macos/build.sh

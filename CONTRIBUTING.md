@@ -6,11 +6,11 @@ Thanks for helping out! Small, focused pull requests are easiest to review.
 
 ```bash
 git clone https://github.com/PerretWilliam/kanba.git && cd kanba
-swift build          # compile
-./build.sh           # build and sign Kanba.app
+cd apps/macos && swift build       # compile
+just macos build   # build and sign Kanba.app
 ```
 
-Tasks: `just` lists them (`just test`, `just cover`, `just build`).
+Tasks: `just` lists them (`just macos test`, `just macos cover`, `just macos build`).
 
 Requires macOS 26+ and Swift 6 (the code builds in Swift 5 language mode).
 
@@ -20,7 +20,7 @@ Requires macOS 26+ and Swift 6 (the code builds in Swift 5 language mode).
 - Match the existing style (compact, no needless abstractions).
 - The on-disk format is documented in [CLAUDE.md](CLAUDE.md). Don't break existing `boards.json` files.
 - AI-driven changes must keep going through a proposal (`Store.propose`) — MCP tools never write the boards directly (only `select_board` and `set_filter`, which are screen state).
-- Add tests. `just cover` must pass: 100% line coverage of the logic layer (`Sources/Kanban/Model`, `Support/BoardFile.swift`). SwiftUI views are excluded: keep logic out of them so it can be tested.
+- Add tests. `just macos cover` must pass: 100% line coverage of the logic layer (`apps/macos/Sources/Kanban/Model`, `Support/BoardFile.swift`). SwiftUI views are excluded: keep logic out of them so it can be tested.
 - AI logos come from [Simple Icons](https://simpleicons.org) (CC0) via `just logos`; never hand-draw a brand logo.
 - Test your change by running the app. For the MCP server, run the app and point `npx @modelcontextprotocol/inspector` (or `curl -X POST -H 'Content-Type: application/json' http://localhost:47821/mcp -d '{...}'`) at `http://localhost:47821/mcp`; the proposal appears in the app. Set `KANBA_DATA=/some/empty/folder` (and `KANBA_PORT=47822` for a second instance) to experiment without touching your real boards.
 
@@ -28,7 +28,7 @@ Requires macOS 26+ and Swift 6 (the code builds in Swift 5 language mode).
 
 1. Fork and create a branch from `main`.
 2. Describe what changed and why; add a screenshot for UI changes.
-3. Make sure `just cover` and `./build.sh` succeed (CI checks both).
+3. Make sure `just macos cover` and `just macos build` succeed (CI checks both).
 
 ## Releases
 

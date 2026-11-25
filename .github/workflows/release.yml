@@ -20,15 +20,15 @@ jobs:
           git rev-parse -q --verify "refs/tags/v$V" >/dev/null && echo "v$V already released: nothing to do" && echo "skip=true" >> "$GITHUB_OUTPUT" || true
       - name: Gates (tests + 100% coverage)
         if: steps.v.outputs.skip != 'true'
-        run: tools/swift-coverage.sh
+        run: apps/macos/tools/swift-coverage.sh
       - name: Build
         if: steps.v.outputs.skip != 'true'
-        run: ./build.sh
+        run: apps/macos/build.sh
       - name: Package
         if: steps.v.outputs.skip != 'true'
         run: |
           V=${{ steps.v.outputs.version }}
-          ditto -c -k --keepParent Kanba.app "Kanba-$V.zip"
+          ditto -c -k --keepParent apps/macos/Kanba.app "Kanba-$V.zip"
           shasum -a 256 "Kanba-$V.zip" > SHA256SUMS
       - name: Tag and publish
         if: steps.v.outputs.skip != 'true'

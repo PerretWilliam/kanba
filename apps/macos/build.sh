@@ -2,7 +2,7 @@
 # Builds Kanba.app next to this script. Usage: ./build.sh
 set -e
 cd "$(dirname "$0")"
-VERSION=${VERSION:-$(cat VERSION)}   # the VERSION file is the app version; VERSION=1.2.3 ./build.sh overrides it
+VERSION=${VERSION:-$(cat ../../VERSION)}   # the root VERSION file is the app version; VERSION=1.2.3 ./build.sh overrides it
 swift build -c release
 APP=Kanba.app
 rm -rf $APP && mkdir -p $APP/Contents/MacOS

@@ -1,22 +1,8 @@
-# Kanba tasks. `just` lists them.
+# Kanba monorepo tasks. `just` lists them; per-app tasks live in apps/<platform>/justfile.
+mod macos 'apps/macos'
+
 default:
-    @just --list
-
-# Build Kanba.app (VERSION=1.2.3 just build to stamp a version)
-build:
-    ./build.sh
-
-# Run all tests
-test:
-    swift test
-
-# Tests + the 100% line-coverage gate on the logic layer (including the MCP server)
-cover:
-    tools/swift-coverage.sh
-
-# Re-download the AI logos (Simple Icons) into Sources/Kanban/Model/Logos.swift
-logos:
-    tools/fetch-logos.sh
+    @just --list --list-submodules
 
 # Cut a release: `just release 1.2.0` bumps the VERSION file, checks, commits and pushes; only that change makes GitHub Actions build, tag vX.Y.Z and publish.
 release version:
@@ -26,7 +12,7 @@ release version:
     [ "$(git branch --show-current)" = main ] || { echo "release from main"; exit 1; }
     [ -z "$(git status --porcelain)" ] || { echo "working tree not clean"; exit 1; }
     git pull --ff-only
-    just cover
+    just macos cover
     echo "{{version}}" > VERSION
     git commit -qam "Release {{version}}"
     git push origin main

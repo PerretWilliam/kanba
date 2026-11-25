@@ -1,0 +1,19 @@
+# Kanba tasks. `just` lists them.
+default:
+    @just --list
+
+# Build Kanba.app (VERSION=1.2.3 just build to stamp a version)
+build:
+    ./build.sh
+
+# Run all tests
+test:
+    swift test
+
+# Tests + the 100% line-coverage gate on the logic layer (including the MCP server)
+cover:
+    tools/swift-coverage.sh
+
+# Re-download the AI logos (Simple Icons) into Sources/Kanban/Model/Logos.swift
+logos:
+    tools/fetch-logos.sh
